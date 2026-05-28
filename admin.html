@@ -202,12 +202,8 @@
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-layer-group me-1"></i>梯次:</label>
         <select id="filterBatch" class="form-select filter-box" style="width: auto; min-width: 90px;">
           <option value="">全部</option>
-          <option value="1">第1梯</option>
-          <option value="2">第2梯</option>
-          <option value="3">第3梯</option>
-          <option value="4">第4梯</option>
-          <option value="5">第5梯</option>
-          <option value="6">第6梯</option>
+          <option value="1">內聘</option>
+          <option value="2">外聘</option>          
         </select>
 
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-filter me-1"></i>科別:</label>
@@ -294,7 +290,7 @@
       
       <div class="row g-2">
         <div class="col-md-4 mb-3"><label>姓名</label><input type="text" class="form-control" name="name" id="editName" required></div>
-        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">第1梯</option><option value="2">第2梯</option><option value="3">第3梯</option><option value="4">第4梯</option><option value="5">第5梯</option></select></div>
+        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
         <div class="col-md-4 mb-3"><label>科別</label><select class="form-select" name="subject" id="editSubject">
                     <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
@@ -345,7 +341,7 @@
     <div class="tab-content">
       <div class="tab-pane fade show active" id="text-pane">
         <div class="row g-2 mb-2">
-            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">內聘第1梯</option><option value="2">內聘第2梯</option><option value="3">內聘第3梯</option><option value="4">內聘第4梯</option><option value="5">內聘第5梯</option><option value="6">外聘</option></select></div>
+            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
             <div class="col-6"><label>設定科別</label><select class="form-select" id="importSubject">
           <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
