@@ -236,23 +236,30 @@
 
     <!-- ★ Dashboard 看板區塊 ★ -->
     <div class="dashboard-section" id="dashboard-section" style="display:none;">
-      <div class="d-flex justify-content-between align-items-center mb-4">
+      <!-- 標題列：點擊折疊 / 展開 -->
+      <div class="d-flex justify-content-between align-items-center" id="dashboard-header"
+           style="cursor:pointer;" onclick="toggleDashboard()">
         <div>
-          <h5 class="fw-bold mb-0"><i class="fa-solid fa-chart-bar me-2 text-primary"></i>各科別徵詢進度看板</h5>
+          <h5 class="fw-bold mb-0">
+            <i class="fa-solid fa-chart-bar me-2 text-primary"></i>各科別徵詢進度看板
+            <i class="fa-solid fa-chevron-down ms-2 text-muted" id="dashboard-chevron"
+               style="font-size:.85rem; transition:transform .25s;"></i>
+          </h5>
           <span id="dashboard-updated" class="db-updated"></span>
         </div>
-        <button class="btn btn-sm btn-outline-primary" onclick="loadDashboardData()">
+        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); loadDashboardData()">
           <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理
         </button>
       </div>
-      <div id="dashboard-loading" class="text-center py-4 text-muted" style="display:none;">
-        <div class="spinner-border spinner-border-sm me-2"></div>載入中…
+      <!-- 可折疊的主體 -->
+      <div id="dashboard-body" style="display:none; margin-top:20px;">
+        <div id="dashboard-loading" class="text-center py-4 text-muted" style="display:none;">
+          <div class="spinner-border spinner-border-sm me-2"></div>載入中…
+        </div>
+        <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
+        <!-- 科別卡片 -->
+        <div id="dashboard-cards" class="row g-3"></div>
       </div>
-      <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
-      <!-- 匯總列 -->
-      <div id="dashboard-summary" class="row g-3 mb-4" style="display:none;"></div>
-      <!-- 科別卡片 -->
-      <div id="dashboard-cards" class="row g-3"></div>
     </div>
 
     <div class="card-box">
@@ -568,17 +575,31 @@ function reloadData() {
   }
 
   // ★ 載入 Dashboard 看板資料
+  function toggleDashboard() {
+    const body    = document.getElementById('dashboard-body');
+    const chevron = document.getElementById('dashboard-chevron');
+    const open    = body.style.display === 'none';
+    body.style.display = open ? '' : 'none';
+    chevron.style.transform = open ? 'rotate(180deg)' : '';
+    // 第一次展開時自動載入
+    if (open && document.getElementById('dashboard-cards').innerHTML === '') {
+      loadDashboardData();
+    }
+  }
+
   function loadDashboardData() {
     const section   = document.getElementById('dashboard-section');
+    const body      = document.getElementById('dashboard-body');
     const loading   = document.getElementById('dashboard-loading');
     const errorDiv  = document.getElementById('dashboard-error');
-    const summaryEl = document.getElementById('dashboard-summary');
     const cardsEl   = document.getElementById('dashboard-cards');
 
     section.style.display  = 'block';
+    // 確保 body 是展開狀態
+    body.style.display = '';
+    document.getElementById('dashboard-chevron').style.transform = 'rotate(180deg)';
     loading.style.display  = 'block';
     errorDiv.style.display = 'none';
-    summaryEl.style.display = 'none';
     cardsEl.innerHTML = '';
 
     fetch(`${API_URL}?action=getDashboardData&t=${Date.now()}`)
@@ -616,34 +637,6 @@ function reloadData() {
         };
         const si = v => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
 
-        // ── 匯總計算 ──
-        let totAdmit = 0, totAgree = 0, totShort = 0, totNoReply = 0;
-        d.rows.forEach(r => {
-          totAdmit   += si(r[C.admit]);
-          totAgree   += si(r[C.agree]);
-          totShort   += si(r[C.short]);
-          totNoReply += si(r[C.noReply]);
-        });
-
-        // ── 匯總列 ──
-        const sumDef = [
-          { lbl:'總正取名額', val:totAdmit,   icon:'fa-users',               bg:'bg-light-primary', color:'#1976d2' },
-          { lbl:'已同意',     val:totAgree,   icon:'fa-circle-check',         bg:'bg-light-success', color:'#2e7d32' },
-          { lbl:'尚缺人數',   val:totShort,   icon:'fa-triangle-exclamation', bg:'bg-light-danger',  color:'#c62828' },
-          { lbl:'尚未回覆',   val:totNoReply, icon:'fa-clock',                bg:'bg-light-warning', color:'#e65100' },
-        ];
-        summaryEl.innerHTML = sumDef.map(s => `
-          <div class="col-6 col-md-3">
-            <div class="db-sum-card ${s.bg}">
-              <div class="db-sum-icon ${s.bg}"><i class="fa-solid ${s.icon}"></i></div>
-              <div>
-                <div class="db-sum-val" style="color:${s.color}">${s.val}</div>
-                <div class="db-sum-lbl">${s.lbl}</div>
-              </div>
-            </div>
-          </div>`).join('');
-        summaryEl.style.display = '';
-
         // ── 科別卡片 ──
         cardsEl.innerHTML = d.rows.map(row => {
           const name    = row[C.name] ?? '';
@@ -655,7 +648,8 @@ function reloadData() {
           const noReply = si(row[C.noReply]);
           const bShort  = C.bShort !== undefined ? si(row[C.bShort]) : null;
 
-          const pct = admit > 0 ? Math.min(100, Math.round(agree / admit * 100)) : 0;
+          const total = admit + backup;
+          const pct = total > 0 ? Math.min(100, Math.round(agree / total * 100)) : 0;
 
           let stClass, badge, barColor;
           if (admit === 0) {
@@ -684,7 +678,7 @@ function reloadData() {
               </div>
               <div class="db-prog-lbl">
                 <span>徵詢進度</span>
-                <span class="fw-semibold">${agree} / ${admit} 人（${pct}%）</span>
+                <span class="fw-semibold">${agree} / ${total} 人（${pct}%）</span>
               </div>
               <div class="db-prog-wrap">
                 <div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div>
