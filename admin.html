@@ -36,12 +36,35 @@
     body.viewer-mode .admin-only { display: none !important; }
     body.viewer-mode #viewer-badge { display: inline-flex !important; }
     #viewer-badge { display: none; }
-    /* Dashboard 看板樣式 */
-    .dashboard-section { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-    #dashboardTable th { background: #f8f9fa; font-weight: 600; white-space: nowrap; }
-    #dashboardTable td { white-space: nowrap; }
-    .db-number { font-weight: 700; font-size: 1.05rem; }
-    .db-shortage { color: #c62828; font-weight: 700; }
+    /* ── Dashboard 看板樣式 ── */
+    .dashboard-section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    /* 匯總統計卡 */
+    .db-sum-card { border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+    .db-sum-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .db-sum-val  { font-size: 1.75rem; font-weight: 800; line-height: 1; }
+    .db-sum-lbl  { font-size: 0.76rem; color: #6c757d; margin-top: 3px; }
+    /* 科別卡 */
+    .db-subject-card { border-radius: 12px; padding: 18px; border: 2px solid transparent; transition: box-shadow .2s, transform .2s; height: 100%; }
+    .db-subject-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.12); transform: translateY(-2px); }
+    .db-subject-card.st-done   { border-color: #43a047; background: #f1faf2; }
+    .db-subject-card.st-active { border-color: #1e88e5; background: #f0f7ff; }
+    .db-subject-card.st-urgent { border-color: #e53935; background: #fff5f5; }
+    .db-subject-card.st-idle   { border-color: #bdbdbd; background: #fafafa; }
+    .db-subject-name { font-size: 1.1rem; font-weight: 700; }
+    /* 進度條 */
+    .db-prog-wrap { height: 9px; border-radius: 5px; background: #e9ecef; overflow: hidden; margin: 8px 0 4px; }
+    .db-prog-bar  { height: 100%; border-radius: 5px; transition: width .7s ease; }
+    .db-prog-lbl  { font-size: 0.78rem; color: #555; display: flex; justify-content: space-between; }
+    /* 統計格 */
+    .db-stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 10px; }
+    .db-stat-item { text-align: center; background: rgba(255,255,255,.72); border-radius: 8px; padding: 7px 4px; }
+    .db-stat-num  { font-size: 1.2rem; font-weight: 700; }
+    .db-stat-lbl  { font-size: 0.68rem; color: #6c757d; margin-top: 1px; }
+    .db-col-agree   { color: #2e7d32; }
+    .db-col-short   { color: #c62828; }
+    .db-col-reject  { color: #6c757d; }
+    .db-col-noreply { color: #e65100; }
+    .db-updated { font-size: 0.75rem; color: #9e9e9e; }
   </style>
 </head>
 <body>
@@ -213,22 +236,23 @@
 
     <!-- ★ Dashboard 看板區塊 ★ -->
     <div class="dashboard-section" id="dashboard-section" style="display:none;">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="fw-bold mb-0"><i class="fa-solid fa-table-list me-2 text-primary"></i>各科別徵詢進度看板</h5>
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h5 class="fw-bold mb-0"><i class="fa-solid fa-chart-bar me-2 text-primary"></i>各科別徵詢進度看板</h5>
+          <span id="dashboard-updated" class="db-updated"></span>
+        </div>
         <button class="btn btn-sm btn-outline-primary" onclick="loadDashboardData()">
-          <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理看板
+          <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理
         </button>
       </div>
-      <div id="dashboard-loading" class="text-center py-3 text-muted" style="display:none;">
-        <div class="spinner-border spinner-border-sm me-2"></div>載入中...
+      <div id="dashboard-loading" class="text-center py-4 text-muted" style="display:none;">
+        <div class="spinner-border spinner-border-sm me-2"></div>載入中…
       </div>
       <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
-      <div class="table-responsive">
-        <table id="dashboardTable" class="table table-bordered table-hover align-middle mb-0" style="display:none;">
-          <thead id="dashboard-thead"></thead>
-          <tbody id="dashboard-tbody"></tbody>
-        </table>
-      </div>
+      <!-- 匯總列 -->
+      <div id="dashboard-summary" class="row g-3 mb-4" style="display:none;"></div>
+      <!-- 科別卡片 -->
+      <div id="dashboard-cards" class="row g-3"></div>
     </div>
 
     <div class="card-box">
@@ -545,23 +569,23 @@ function reloadData() {
 
   // ★ 載入 Dashboard 看板資料
   function loadDashboardData() {
-    const section = document.getElementById('dashboard-section');
-    const loading = document.getElementById('dashboard-loading');
-    const errorDiv = document.getElementById('dashboard-error');
-    const table = document.getElementById('dashboardTable');
+    const section   = document.getElementById('dashboard-section');
+    const loading   = document.getElementById('dashboard-loading');
+    const errorDiv  = document.getElementById('dashboard-error');
+    const summaryEl = document.getElementById('dashboard-summary');
+    const cardsEl   = document.getElementById('dashboard-cards');
 
-    section.style.display = 'block';
-    loading.style.display = 'block';
-    table.style.display = 'none';
+    section.style.display  = 'block';
+    loading.style.display  = 'block';
     errorDiv.style.display = 'none';
+    summaryEl.style.display = 'none';
+    cardsEl.innerHTML = '';
 
-    const timestamp = new Date().getTime();
-    fetch(`${API_URL}?action=getDashboardData&t=${timestamp}`)
+    fetch(`${API_URL}?action=getDashboardData&t=${Date.now()}`)
       .then(r => r.json())
       .then(res => {
         loading.style.display = 'none';
 
-        // 先判斷 GAS 回傳的頂層 status
         if (res.status === 'error') {
           errorDiv.textContent = '讀取失敗：' + (res.message || '未知錯誤') +
             '（若剛推送新程式碼，請至 GAS 編輯器重新部署 Web App）';
@@ -570,58 +594,136 @@ function reloadData() {
         }
 
         const d = res.data || {};
-
-        // getDashboardData 本身回傳的錯誤
-        if (d.error) {
-          errorDiv.textContent = d.error;
-          errorDiv.style.display = 'block';
-          return;
-        }
-
-        const thead = document.getElementById('dashboard-thead');
-        const tbody = document.getElementById('dashboard-tbody');
-        thead.innerHTML = '';
-        tbody.innerHTML = '';
-
+        if (d.error) { errorDiv.textContent = d.error; errorDiv.style.display = 'block'; return; }
         if (!d.headers || d.headers.length === 0) {
           errorDiv.textContent = 'Dashboard 工作表無資料，請確認試算表中已建立 Dashboard 分頁並填入資料。';
           errorDiv.style.display = 'block';
           return;
         }
 
-        // 建立表頭
-        const trHead = document.createElement('tr');
-        d.headers.forEach(h => {
-          const th = document.createElement('th');
-          th.textContent = h;
-          trHead.appendChild(th);
-        });
-        thead.appendChild(trHead);
+        // ── 欄位索引對應 ──
+        const idx = {};
+        d.headers.forEach((h, i) => { idx[h] = i; });
+        const C = {
+          name:    idx['科別'],
+          admit:   idx['正取人數'],
+          backup:  idx['預備人數'],
+          agree:   idx['已同意'],
+          short:   idx['尚缺人數'],
+          reject:  idx['已婉拒'],
+          noReply: idx['未回'],
+          bShort:  idx['預備區缺續找']
+        };
+        const si = v => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
 
-        // 建立資料列
-        // 找出「尚缺人數」欄位索引，用來高亮標示
-        const shortageIdx = d.headers.findIndex(h => h.includes('尚缺'));
-
-        d.rows.forEach(row => {
-          const tr = document.createElement('tr');
-          row.forEach((cell, idx) => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            if (idx === 0) {
-              td.classList.add('fw-semibold');
-            } else {
-              td.classList.add('db-number', 'text-center');
-            }
-            if (idx === shortageIdx) {
-              const num = parseFloat(cell);
-              if (!isNaN(num) && num > 0) td.classList.add('db-shortage');
-            }
-            tr.appendChild(td);
-          });
-          tbody.appendChild(tr);
+        // ── 匯總計算 ──
+        let totAdmit = 0, totAgree = 0, totShort = 0, totNoReply = 0;
+        d.rows.forEach(r => {
+          totAdmit   += si(r[C.admit]);
+          totAgree   += si(r[C.agree]);
+          totShort   += si(r[C.short]);
+          totNoReply += si(r[C.noReply]);
         });
 
-        table.style.display = '';
+        // ── 匯總列 ──
+        const sumDef = [
+          { lbl:'總正取名額', val:totAdmit,   icon:'fa-users',               bg:'bg-light-primary', color:'#1976d2' },
+          { lbl:'已同意',     val:totAgree,   icon:'fa-circle-check',         bg:'bg-light-success', color:'#2e7d32' },
+          { lbl:'尚缺人數',   val:totShort,   icon:'fa-triangle-exclamation', bg:'bg-light-danger',  color:'#c62828' },
+          { lbl:'尚未回覆',   val:totNoReply, icon:'fa-clock',                bg:'bg-light-warning', color:'#e65100' },
+        ];
+        summaryEl.innerHTML = sumDef.map(s => `
+          <div class="col-6 col-md-3">
+            <div class="db-sum-card ${s.bg}">
+              <div class="db-sum-icon ${s.bg}"><i class="fa-solid ${s.icon}"></i></div>
+              <div>
+                <div class="db-sum-val" style="color:${s.color}">${s.val}</div>
+                <div class="db-sum-lbl">${s.lbl}</div>
+              </div>
+            </div>
+          </div>`).join('');
+        summaryEl.style.display = '';
+
+        // ── 科別卡片 ──
+        cardsEl.innerHTML = d.rows.map(row => {
+          const name    = row[C.name] ?? '';
+          const admit   = si(row[C.admit]);
+          const backup  = si(row[C.backup]);
+          const agree   = si(row[C.agree]);
+          const short   = si(row[C.short]);
+          const reject  = si(row[C.reject]);
+          const noReply = si(row[C.noReply]);
+          const bShort  = C.bShort !== undefined ? si(row[C.bShort]) : null;
+
+          const pct = admit > 0 ? Math.min(100, Math.round(agree / admit * 100)) : 0;
+
+          let stClass, badge, barColor;
+          if (admit === 0) {
+            stClass = 'st-idle';   badge = '<span class="badge bg-secondary">未設定</span>'; barColor = '#9e9e9e';
+          } else if (short === 0) {
+            stClass = 'st-done';   badge = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>已完成</span>'; barColor = '#43a047';
+          } else if (noReply > 0) {
+            stClass = 'st-active'; badge = '<span class="badge bg-primary"><i class="fa-solid fa-spinner me-1"></i>進行中</span>'; barColor = '#1e88e5';
+          } else {
+            stClass = 'st-urgent'; badge = '<span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>需補充</span>'; barColor = '#e53935';
+          }
+
+          const bShortHtml = bShort !== null
+            ? `<div class="db-stat-item">
+                 <div class="db-stat-num ${bShort > 0 ? 'db-col-short' : ''}">${bShort}</div>
+                 <div class="db-stat-lbl">預備缺</div>
+               </div>`
+            : '';
+
+          return `
+          <div class="col-12 col-sm-6 col-xl-4">
+            <div class="db-subject-card ${stClass}">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="db-subject-name">${name}</div>
+                ${badge}
+              </div>
+              <div class="db-prog-lbl">
+                <span>徵詢進度</span>
+                <span class="fw-semibold">${agree} / ${admit} 人（${pct}%）</span>
+              </div>
+              <div class="db-prog-wrap">
+                <div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div>
+              </div>
+              <div class="db-stat-grid">
+                <div class="db-stat-item">
+                  <div class="db-stat-num">${admit}</div>
+                  <div class="db-stat-lbl">正取名額</div>
+                </div>
+                <div class="db-stat-item">
+                  <div class="db-stat-num db-col-agree">${agree}</div>
+                  <div class="db-stat-lbl">已同意</div>
+                </div>
+                <div class="db-stat-item">
+                  <div class="db-stat-num ${short > 0 ? 'db-col-short' : ''}">${short}</div>
+                  <div class="db-stat-lbl">尚缺</div>
+                </div>
+                <div class="db-stat-item">
+                  <div class="db-stat-num">${backup}</div>
+                  <div class="db-stat-lbl">預備名額</div>
+                </div>
+                <div class="db-stat-item">
+                  <div class="db-stat-num db-col-reject">${reject}</div>
+                  <div class="db-stat-lbl">已婉拒</div>
+                </div>
+                <div class="db-stat-item">
+                  <div class="db-stat-num db-col-noreply">${noReply}</div>
+                  <div class="db-stat-lbl">未回應</div>
+                </div>
+                ${bShortHtml}
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+
+        // 更新時間
+        const now = new Date();
+        document.getElementById('dashboard-updated').textContent =
+          `上次更新：${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
       })
       .catch(err => {
         loading.style.display = 'none';
