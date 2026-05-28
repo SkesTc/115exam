@@ -560,8 +560,18 @@ function reloadData() {
       .then(r => r.json())
       .then(res => {
         loading.style.display = 'none';
-        const d = res.data ? res.data : res;
 
+        // 先判斷 GAS 回傳的頂層 status
+        if (res.status === 'error') {
+          errorDiv.textContent = '讀取失敗：' + (res.message || '未知錯誤') +
+            '（若剛推送新程式碼，請至 GAS 編輯器重新部署 Web App）';
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        const d = res.data || {};
+
+        // getDashboardData 本身回傳的錯誤
         if (d.error) {
           errorDiv.textContent = d.error;
           errorDiv.style.display = 'block';
