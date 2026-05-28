@@ -41,6 +41,8 @@ function doGet(e) {
     } else if (action === 'resolveShortCode') {
       // 處理前端丟過來的短代碼解析請求
       data = resolveShortCode(p.s);
+    } else if (action === 'getDashboardData') {
+      data = getDashboardData();
     } else {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 GET 請求' }))
                            .setMimeType(ContentService.MimeType.JSON);
@@ -750,28 +752,62 @@ function onOpen(){
 function verifyLogin(username, password) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName("User");
-  
+
   if (!sheet) {
     return { status: 'error', message: '系統找不到 User 分頁，請聯絡管理員。' };
   }
-  
+
   const data = sheet.getDataRange().getValues();
-  
+
   // 假設第一列是標題，從第二列開始比對
+  // 欄位：A=帳號, B=密碼, C=角色 (admin/viewer，預設為 admin)
   for (let i = 1; i < data.length; i++) {
     let rowUser = String(data[i][0]).trim();
     let rowPass = String(data[i][1]).trim();
-    
+    let rowRole = String(data[i][2] || '').trim() || 'admin';
+
     if (rowUser === username && rowPass === password) {
-      return { status: 'success', message: '登入成功' };
+      return { status: 'success', message: '登入成功', role: rowRole };
     }
   }
-  
+
   return { status: 'error', message: '帳號或密碼錯誤！' };
 }
 
 // ==========================================
-// 9. 系統自建縮網址功能
+// 9. Dashboard 看板資料
+// ==========================================
+function getDashboardData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Dashboard");
+
+  if (!sheet) {
+    return { headers: [], rows: [], error: '找不到 Dashboard 分頁，請先在試算表中建立此工作表。' };
+  }
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+
+  if (lastRow < 1 || lastCol < 1) {
+    return { headers: [], rows: [] };
+  }
+
+  const allValues = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = allValues[0].map(h => String(h));
+  const rows = [];
+
+  for (let i = 1; i < allValues.length; i++) {
+    const row = allValues[i];
+    // 略過完全空白的列
+    if (row.every(cell => cell === '' || cell === null || cell === undefined)) continue;
+    rows.push(row.map(cell => (cell === null || cell === undefined) ? '' : String(cell)));
+  }
+
+  return { headers, rows };
+}
+
+// ==========================================
+// 11. 系統自建縮網址功能
 // ==========================================
 function createShortUrl(longUrl) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

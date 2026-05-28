@@ -32,6 +32,16 @@
     /* 登入視窗樣式 */
     .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f0f2f5; z-index: 10000; display: flex; justify-content: center; align-items: center; }
     .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    /* 檢視者模式：隱藏所有管理操作 */
+    body.viewer-mode .admin-only { display: none !important; }
+    body.viewer-mode #viewer-badge { display: inline-flex !important; }
+    #viewer-badge { display: none; }
+    /* Dashboard 看板樣式 */
+    .dashboard-section { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    #dashboardTable th { background: #f8f9fa; font-weight: 600; white-space: nowrap; }
+    #dashboardTable td { white-space: nowrap; }
+    .db-number { font-weight: 700; font-size: 1.05rem; }
+    .db-shortage { color: #c62828; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -61,7 +71,10 @@
   </div>
 
   <div class="admin-header d-flex justify-content-between align-items-center">
-    <h4 class="m-0 fw-bold text-dark"><i class="fa-solid fa-chart-line me-2 text-primary"></i>教甄委員管理後台</h4>
+    <h4 class="m-0 fw-bold text-dark">
+      <i class="fa-solid fa-chart-line me-2 text-primary"></i>教甄委員管理後台
+      <span id="viewer-badge" class="badge bg-warning text-dark ms-2" style="font-size:0.75rem; vertical-align: middle;"><i class="fa-solid fa-eye me-1"></i>檢視模式</span>
+    </h4>
     <button class="btn btn-light border text-primary fw-bold" onclick="reloadData()">
       <i class="fa-solid fa-rotate-right me-1"></i>重新整理
     </button>
@@ -137,6 +150,7 @@
           <option value="3">第3梯</option>
           <option value="4">第4梯</option>
           <option value="5">第5梯</option>
+          <option value="6">第6梯</option>
         </select>
 
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-filter me-1"></i>科別:</label>
@@ -182,18 +196,38 @@
       </div>
 
       <div class="d-flex gap-2 flex-wrap justify-content-end">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal"><i class="fa-solid fa-plus me-1"></i>新增</button>
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importModal"><i class="fa-solid fa-file-import me-1"></i>匯入</button>
+        <button class="btn btn-primary admin-only" data-bs-toggle="modal" data-bs-target="#addModal"><i class="fa-solid fa-plus me-1"></i>新增</button>
+        <button class="btn btn-success admin-only" data-bs-toggle="modal" data-bs-target="#importModal"><i class="fa-solid fa-file-import me-1"></i>匯入</button>
         <button class="btn btn-secondary" onclick="exportCSV()"><i class="fa-solid fa-file-export me-1"></i>匯出</button>
-        
-        <button class="btn btn-dark" onclick="openTemplateModal()"><i class="fa-solid fa-pen-to-square me-1"></i>範本設定</button>
-        
-        <div class="vr"></div> 
-        <button class="btn btn-warning" onclick="resendSelected()"><i class="fa-regular fa-envelope me-1"></i>寄信</button>
-        <!--<button class="btn btn-info text-white" onclick="openSMSModal()"><i class="fa-regular fa-comment-dots me-1"></i>簡訊</button>-->
-        <button class="btn btn-outline-success btn-sm me-2" onclick="exportSmsExcel()">
+
+        <button class="btn btn-dark admin-only" onclick="openTemplateModal()"><i class="fa-solid fa-pen-to-square me-1"></i>範本設定</button>
+
+        <div class="vr admin-only"></div>
+        <button class="btn btn-warning admin-only" onclick="resendSelected()"><i class="fa-regular fa-envelope me-1"></i>寄信</button>
+        <!--<button class="btn btn-info text-white admin-only" onclick="openSMSModal()"><i class="fa-regular fa-comment-dots me-1"></i>簡訊</button>-->
+        <button class="btn btn-outline-success btn-sm me-2 admin-only" onclick="exportSmsExcel()">
         <i class="fas fa-file-csv"></i> 簡訊批次檔</button>
-        <button class="btn btn-danger" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
+        <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
+      </div>
+    </div>
+
+    <!-- ★ Dashboard 看板區塊 ★ -->
+    <div class="dashboard-section" id="dashboard-section" style="display:none;">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0"><i class="fa-solid fa-table-list me-2 text-primary"></i>各科別徵詢進度看板</h5>
+        <button class="btn btn-sm btn-outline-primary" onclick="loadDashboardData()">
+          <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理看板
+        </button>
+      </div>
+      <div id="dashboard-loading" class="text-center py-3 text-muted" style="display:none;">
+        <div class="spinner-border spinner-border-sm me-2"></div>載入中...
+      </div>
+      <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
+      <div class="table-responsive">
+        <table id="dashboardTable" class="table table-bordered table-hover align-middle mb-0" style="display:none;">
+          <thead id="dashboard-thead"></thead>
+          <tbody id="dashboard-tbody"></tbody>
+        </table>
       </div>
     </div>
 
@@ -204,7 +238,7 @@
             <th width="30"><input type="checkbox" id="selectAll" class="form-check-input"></th>
             <th>梯次</th>
             <th>科別</th>
-            <th>基本資料</th> 
+            <th>基本資料</th>
             <th>聯絡資訊</th>
             <th>狀態</th>
             <th>回覆</th>
@@ -381,6 +415,10 @@
   // ==========================================
   //const API_URL = "https://script.google.com/macros/s/AKfycbwPaKHUAIE2yUB8kEijIKFYHcEaRl2ts0X2a9efGyZSAo2IsomLWJXkYRvPU_2GIM_B/exec"; 
   const API_URL = "https://api-fetcher.kelvin-d83.workers.dev"
+
+  // 使用者角色：admin (預設) / viewer
+  window.userRole = 'admin';
+
   function getBatchBadge(batch) {
     const b = parseInt(batch) || 1; 
     let colorClass = "bg-secondary"; 
@@ -477,6 +515,11 @@ function reloadData() {
       const resData = result.status ? result : (result.data || {});
       
       if (resData.status === 'success') {
+        // 儲存角色並套用檢視者限制
+        window.userRole = (resData.role || 'admin').toLowerCase();
+        if (window.userRole === 'viewer') {
+          applyViewerMode();
+        }
         // 登入成功：隱藏登入畫面，並開始載入後台資料
         $('#login-overlay').fadeOut(500, function() {
            $('#loading-overlay').fadeIn(100);
@@ -495,6 +538,88 @@ function reloadData() {
   }
 
 
+  // ★ 套用檢視者模式
+  function applyViewerMode() {
+    document.body.classList.add('viewer-mode');
+  }
+
+  // ★ 載入 Dashboard 看板資料
+  function loadDashboardData() {
+    const section = document.getElementById('dashboard-section');
+    const loading = document.getElementById('dashboard-loading');
+    const errorDiv = document.getElementById('dashboard-error');
+    const table = document.getElementById('dashboardTable');
+
+    section.style.display = 'block';
+    loading.style.display = 'block';
+    table.style.display = 'none';
+    errorDiv.style.display = 'none';
+
+    const timestamp = new Date().getTime();
+    fetch(`${API_URL}?action=getDashboardData&t=${timestamp}`)
+      .then(r => r.json())
+      .then(res => {
+        loading.style.display = 'none';
+        const d = res.data ? res.data : res;
+
+        if (d.error) {
+          errorDiv.textContent = d.error;
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        const thead = document.getElementById('dashboard-thead');
+        const tbody = document.getElementById('dashboard-tbody');
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        if (!d.headers || d.headers.length === 0) {
+          errorDiv.textContent = 'Dashboard 工作表無資料，請確認試算表中已建立 Dashboard 分頁並填入資料。';
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        // 建立表頭
+        const trHead = document.createElement('tr');
+        d.headers.forEach(h => {
+          const th = document.createElement('th');
+          th.textContent = h;
+          trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+
+        // 建立資料列
+        // 找出「尚缺人數」欄位索引，用來高亮標示
+        const shortageIdx = d.headers.findIndex(h => h.includes('尚缺'));
+
+        d.rows.forEach(row => {
+          const tr = document.createElement('tr');
+          row.forEach((cell, idx) => {
+            const td = document.createElement('td');
+            td.textContent = cell;
+            if (idx === 0) {
+              td.classList.add('fw-semibold');
+            } else {
+              td.classList.add('db-number', 'text-center');
+            }
+            if (idx === shortageIdx) {
+              const num = parseFloat(cell);
+              if (!isNaN(num) && num > 0) td.classList.add('db-shortage');
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+
+        table.style.display = '';
+      })
+      .catch(err => {
+        loading.style.display = 'none';
+        errorDiv.textContent = '載入看板資料失敗：' + err;
+        errorDiv.style.display = 'block';
+      });
+  }
+
   // 1. 讀取資料 (改為 fetch GET)
   function loadData() {
     const timestamp = new Date().getTime();
@@ -502,8 +627,10 @@ function reloadData() {
       .then(response => response.json())
       .then(data => {
         // 確保相容 { status: 'success', data: ... } 或直接回傳資料的格式
-        const resultData = data.data ? data.data : data; 
+        const resultData = data.data ? data.data : data;
         renderDashboard(resultData);
+        // 主表載入完成後同時載入 Dashboard 看板
+        loadDashboardData();
       })
       .catch(err => {
         $('#loading-overlay').fadeOut();
@@ -571,7 +698,9 @@ function reloadData() {
         }
         
         const infoHtml = `<div class="fw-bold">${row.name} ${dietBadge}</div><small class="text-muted">${row.unit||''} ${row.title?'/ '+row.title:''}</small>`;
-        const btnHtml = `<button class="btn btn-sm btn-outline-secondary" onclick="editUser('${row.uid}','${escapeParam(row.name)}','${escapeParam(row.subject)}','${escapeParam(row.email)}','${escapeParam(row.phone)}','${escapeParam(row.unit)}','${escapeParam(row.title)}','${escapeParam(row.diet)}','${row.willingness}','${escapeParam(row.note)}', '${row.batch}')">編輯</button>`;
+        // 檢視者模式不顯示編輯按鈕
+        const btnHtml = (window.userRole === 'viewer') ? '<span class="text-muted small">-</span>' :
+          `<button class="btn btn-sm btn-outline-secondary" onclick="editUser('${row.uid}','${escapeParam(row.name)}','${escapeParam(row.subject)}','${escapeParam(row.email)}','${escapeParam(row.phone)}','${escapeParam(row.unit)}','${escapeParam(row.title)}','${escapeParam(row.diet)}','${row.willingness}','${escapeParam(row.note)}', '${row.batch}')">編輯</button>`;
         
         const tr = `<tr id="row-${row.uid}">
             <td><input type="checkbox" class="form-check-input row-check" value="${row.uid}"></td>
