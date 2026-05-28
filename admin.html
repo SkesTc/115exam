@@ -163,6 +163,34 @@
       </div>
     </div>
 
+    <!-- ★ Dashboard 看板區塊 ★ -->
+    <div class="dashboard-section" id="dashboard-section" style="display:none;">
+      <!-- 標題列：點擊折疊 / 展開 -->
+      <div class="d-flex justify-content-between align-items-center" id="dashboard-header"
+           style="cursor:pointer;" onclick="toggleDashboard()">
+        <div>
+          <h5 class="fw-bold mb-0">
+            <i class="fa-solid fa-chart-bar me-2 text-primary"></i>各科別徵詢進度看板
+            <i class="fa-solid fa-chevron-down ms-2 text-muted" id="dashboard-chevron"
+               style="font-size:.85rem; transition:transform .25s;"></i>
+          </h5>
+          <span id="dashboard-updated" class="db-updated"></span>
+        </div>
+        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); loadDashboardData()">
+          <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理
+        </button>
+      </div>
+      <!-- 可折疊的主體（預設收合） -->
+      <div id="dashboard-body" style="display:none; margin-top:20px;">
+        <div id="dashboard-loading" class="text-center py-4 text-muted" style="display:none;">
+          <div class="spinner-border spinner-border-sm me-2"></div>載入中…
+        </div>
+        <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
+        <!-- 科別卡片 -->
+        <div id="dashboard-cards" class="row g-3"></div>
+      </div>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
  <div class="d-flex align-items-center gap-2 flex-wrap">
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-layer-group me-1"></i>梯次:</label>
@@ -231,34 +259,6 @@
         <button class="btn btn-outline-success btn-sm me-2 admin-only" onclick="exportSmsExcel()">
         <i class="fas fa-file-csv"></i> 簡訊批次檔</button>
         <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
-      </div>
-    </div>
-
-    <!-- ★ Dashboard 看板區塊 ★ -->
-    <div class="dashboard-section" id="dashboard-section" style="display:none;">
-      <!-- 標題列：點擊折疊 / 展開 -->
-      <div class="d-flex justify-content-between align-items-center" id="dashboard-header"
-           style="cursor:pointer;" onclick="toggleDashboard()">
-        <div>
-          <h5 class="fw-bold mb-0">
-            <i class="fa-solid fa-chart-bar me-2 text-primary"></i>各科別徵詢進度看板
-            <i class="fa-solid fa-chevron-down ms-2 text-muted" id="dashboard-chevron"
-               style="font-size:.85rem; transition:transform .25s;"></i>
-          </h5>
-          <span id="dashboard-updated" class="db-updated"></span>
-        </div>
-        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); loadDashboardData()">
-          <i class="fa-solid fa-arrows-rotate me-1"></i>重新整理
-        </button>
-      </div>
-      <!-- 可折疊的主體 -->
-      <div id="dashboard-body" style="display:none; margin-top:20px;">
-        <div id="dashboard-loading" class="text-center py-4 text-muted" style="display:none;">
-          <div class="spinner-border spinner-border-sm me-2"></div>載入中…
-        </div>
-        <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
-        <!-- 科別卡片 -->
-        <div id="dashboard-cards" class="row g-3"></div>
       </div>
     </div>
 
@@ -595,9 +595,6 @@ function reloadData() {
     const cardsEl   = document.getElementById('dashboard-cards');
 
     section.style.display  = 'block';
-    // 確保 body 是展開狀態
-    body.style.display = '';
-    document.getElementById('dashboard-chevron').style.transform = 'rotate(180deg)';
     loading.style.display  = 'block';
     errorDiv.style.display = 'none';
     cardsEl.innerHTML = '';
@@ -735,8 +732,8 @@ function reloadData() {
         // 確保相容 { status: 'success', data: ... } 或直接回傳資料的格式
         const resultData = data.data ? data.data : data;
         renderDashboard(resultData);
-        // 主表載入完成後同時載入 Dashboard 看板
-        loadDashboardData();
+        // 主表載入完成後顯示看板 header（預設收合，點擊再展開）
+        document.getElementById('dashboard-section').style.display = 'block';
       })
       .catch(err => {
         $('#loading-overlay').fadeOut();
@@ -1013,7 +1010,9 @@ function exportSmsExcel() {
 
  function exportCSV() {
     if(!globalData||!globalData.list||globalData.list.length===0)return alert("無資料");
-    
+
+    const isViewer = (window.userRole === 'viewer');
+
     // 取得 4 個選單的當前值
     const currentSubject = $('#filterSubject').val();
     const currentBatch = $('#filterBatch').val();
@@ -1022,6 +1021,9 @@ function exportSmsExcel() {
 
     // 進行多重條件過濾
     const de = globalData.list.filter(r => {
+      // 檢視模式：只匯出已同意的資料
+      if (isViewer && r.willingness !== 'yes') return false;
+
       let matchBatch = !currentBatch || String(r.batch) === currentBatch;
       let matchSubject = !currentSubject || r.subject === currentSubject;
       
