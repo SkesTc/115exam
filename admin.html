@@ -675,9 +675,13 @@ function reloadData() {
       $('#stat-diet').html(`葷:<span class="text-primary">${dietMeat}</span> / 素:<span class="text-success">${dietVeg}</span>`);
 
       if ($.fn.DataTable.isDataTable('#adminTable')) $('#adminTable').DataTable().destroy();
-      const tbody = $('#table-body'); tbody.empty(); 
-      
-      data.list.forEach(row => {
+      const tbody = $('#table-body'); tbody.empty();
+
+      const displayList = (window.userRole === 'viewer')
+        ? data.list.filter(r => r.willingness === 'yes')
+        : data.list;
+
+      displayList.forEach(row => {
         let emailStatus = `<span class="badge bg-secondary">未發送</span>`;
         if (row.status === "已發送" || row.status === "已回覆") {
            if (row.readTime) emailStatus = `<span class="badge bg-warning text-dark"><i class="fa-regular fa-eye me-1"></i>信件已讀</span><br><small class="text-muted" style="font-size:0.7rem">${row.readTime}</small>`;
@@ -722,13 +726,12 @@ function reloadData() {
         tbody.append(tr);
       });
 
-      const isViewer = (window.userRole === 'viewer');
       dataTable = $('#adminTable').DataTable({
         "language": { "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/zh-HANT.json" },
         "order": [[ 6, "desc" ], [ 5, "desc" ]],
         "autoWidth": false,
-        "pageLength": isViewer ? 100 : 10,
-        "lengthMenu": isViewer ? [[25, 50, 100, -1],[25, 50, 100, "全部"]] : [[10, 25, 50, 100, -1],[10, 25, 50, 100, "全部"]],
+        "pageLength": 100,
+        "lengthMenu": [[25, 50, 100, -1],[25, 50, 100, "全部"]],
         "drawCallback": function() { [...document.querySelectorAll('[data-bs-toggle="popover"]')].map(el => new bootstrap.Popover(el)); },
         "initComplete": function() { $('#loading-overlay').fadeOut(300); }
       });
