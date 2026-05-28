@@ -38,33 +38,34 @@
     #viewer-badge { display: none; }
     /* ── Dashboard 看板樣式 ── */
     .dashboard-section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-    /* 匯總統計卡 */
-    .db-sum-card { border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
-    .db-sum-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-    .db-sum-val  { font-size: 1.75rem; font-weight: 800; line-height: 1; }
-    .db-sum-lbl  { font-size: 0.76rem; color: #6c757d; margin-top: 3px; }
-    /* 科別卡 */
-    .db-subject-card { border-radius: 12px; padding: 18px; border: 2px solid transparent; transition: box-shadow .2s, transform .2s; height: 100%; }
-    .db-subject-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.12); transform: translateY(-2px); }
-    .db-subject-card.st-done   { border-color: #43a047; background: #f1faf2; }
-    .db-subject-card.st-active { border-color: #1e88e5; background: #f0f7ff; }
-    .db-subject-card.st-urgent { border-color: #e53935; background: #fff5f5; }
-    .db-subject-card.st-idle   { border-color: #bdbdbd; background: #fafafa; }
-    .db-subject-name { font-size: 1.1rem; font-weight: 700; }
-    /* 進度條 */
-    .db-prog-wrap { height: 9px; border-radius: 5px; background: #e9ecef; overflow: hidden; margin: 8px 0 4px; }
-    .db-prog-bar  { height: 100%; border-radius: 5px; transition: width .7s ease; }
-    .db-prog-lbl  { font-size: 0.78rem; color: #555; display: flex; justify-content: space-between; }
-    /* 統計格 */
-    .db-stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin-top: 10px; }
-    .db-stat-item { text-align: center; background: rgba(255,255,255,.72); border-radius: 8px; padding: 7px 4px; }
-    .db-stat-num  { font-size: 1.2rem; font-weight: 700; }
-    .db-stat-lbl  { font-size: 0.68rem; color: #6c757d; margin-top: 1px; }
-    .db-col-agree   { color: #2e7d32; }
-    .db-col-short   { color: #c62828; }
-    .db-col-reject  { color: #6c757d; }
-    .db-col-noreply { color: #e65100; }
     .db-updated { font-size: 0.75rem; color: #9e9e9e; }
+    /* 表格本體 */
+    #db-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.92rem; }
+    #db-table thead th { background: #1e3a5f; color: #fff; font-weight: 600; white-space: nowrap; padding: 11px 14px; text-align: center; border: none; }
+    #db-table thead th:first-child { border-radius: 10px 0 0 0; text-align: left; }
+    #db-table thead th:last-child  { border-radius: 0 10px 0 0; }
+    #db-table tbody tr { transition: background .15s; }
+    #db-table tbody tr:nth-child(even) { background: #f8f9fc; }
+    #db-table tbody tr:hover { background: #eef3fb; }
+    #db-table tbody td { padding: 10px 14px; border-bottom: 1px solid #e9ecef; vertical-align: middle; }
+    #db-table tbody td.db-name { font-weight: 700; font-size: 0.95rem; white-space: nowrap; }
+    #db-table tbody td.db-num  { text-align: center; font-weight: 600; font-size: 1rem; }
+    /* 進度條欄 */
+    .db-prog-cell { min-width: 120px; }
+    .db-prog-wrap { height: 8px; border-radius: 4px; background: #dee2e6; overflow: hidden; margin-top: 4px; }
+    .db-prog-bar  { height: 100%; border-radius: 4px; transition: width .6s ease; }
+    .db-prog-txt  { font-size: 0.75rem; color: #555; white-space: nowrap; }
+    /* 狀態徽章 */
+    .db-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+    .db-badge.done   { background: #e8f5e9; color: #2e7d32; }
+    .db-badge.active { background: #e3f2fd; color: #1565c0; }
+    .db-badge.urgent { background: #ffebee; color: #c62828; }
+    .db-badge.idle   { background: #f5f5f5; color: #757575; }
+    /* 數字顏色 */
+    .db-agree  { color: #2e7d32; }
+    .db-short  { color: #c62828; }
+    .db-reject { color: #757575; }
+    .db-noreply{ color: #e65100; }
   </style>
 </head>
 <body>
@@ -186,8 +187,13 @@
           <div class="spinner-border spinner-border-sm me-2"></div>載入中…
         </div>
         <div id="dashboard-error" class="alert alert-warning" style="display:none;"></div>
-        <!-- 科別卡片 -->
-        <div id="dashboard-cards" class="row g-3"></div>
+        <!-- 看板表格 -->
+        <div class="table-responsive">
+          <table id="db-table" style="display:none;">
+            <thead><tr id="db-thead-row"></tr></thead>
+            <tbody id="db-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -582,22 +588,25 @@ function reloadData() {
     body.style.display = open ? '' : 'none';
     chevron.style.transform = open ? 'rotate(180deg)' : '';
     // 第一次展開時自動載入
-    if (open && document.getElementById('dashboard-cards').innerHTML === '') {
+    if (open && document.getElementById('db-tbody').innerHTML === '') {
       loadDashboardData();
     }
   }
 
   function loadDashboardData() {
     const section   = document.getElementById('dashboard-section');
-    const body      = document.getElementById('dashboard-body');
     const loading   = document.getElementById('dashboard-loading');
     const errorDiv  = document.getElementById('dashboard-error');
-    const cardsEl   = document.getElementById('dashboard-cards');
+    const tbl       = document.getElementById('db-table');
+    const theadRow  = document.getElementById('db-thead-row');
+    const tbody     = document.getElementById('db-tbody');
 
     section.style.display  = 'block';
     loading.style.display  = 'block';
     errorDiv.style.display = 'none';
-    cardsEl.innerHTML = '';
+    tbl.style.display      = 'none';
+    theadRow.innerHTML = '';
+    tbody.innerHTML    = '';
 
     fetch(`${API_URL}?action=getDashboardData&t=${Date.now()}`)
       .then(r => r.json())
@@ -634,8 +643,25 @@ function reloadData() {
         };
         const si = v => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
 
-        // ── 科別卡片 ──
-        cardsEl.innerHTML = d.rows.map(row => {
+        // ── 表頭 ──
+        const cols = [
+          { label: '科別',     icon: 'fa-tag' },
+          { label: '狀態',     icon: 'fa-circle-info' },
+          { label: '徵詢進度', icon: 'fa-bars-progress' },
+          { label: '正取',     icon: 'fa-user-check' },
+          { label: '預備',     icon: 'fa-user-clock' },
+          { label: '已同意',   icon: 'fa-circle-check' },
+          { label: '尚缺',     icon: 'fa-triangle-exclamation' },
+          { label: '已婉拒',   icon: 'fa-circle-xmark' },
+          { label: '未回應',   icon: 'fa-clock' },
+        ];
+        if (C.bShort !== undefined) cols.push({ label: '預備缺', icon: 'fa-hourglass-half' });
+        theadRow.innerHTML = cols.map(c =>
+          `<th><i class="fa-solid ${c.icon} me-1 opacity-75"></i>${c.label}</th>`
+        ).join('');
+
+        // ── 資料列 ──
+        tbody.innerHTML = d.rows.map(row => {
           const name    = row[C.name] ?? '';
           const admit   = si(row[C.admit]);
           const backup  = si(row[C.backup]);
@@ -646,70 +672,40 @@ function reloadData() {
           const bShort  = C.bShort !== undefined ? si(row[C.bShort]) : null;
 
           const total = admit + backup;
-          const pct = total > 0 ? Math.min(100, Math.round(agree / total * 100)) : 0;
+          const pct   = total > 0 ? Math.min(100, Math.round(agree / total * 100)) : 0;
 
-          let stClass, badge, barColor;
+          let badge, barColor, rowClass = '';
           if (admit === 0) {
-            stClass = 'st-idle';   badge = '<span class="badge bg-secondary">未設定</span>'; barColor = '#9e9e9e';
+            badge = '<span class="db-badge idle">未設定</span>'; barColor = '#9e9e9e';
           } else if (short === 0) {
-            stClass = 'st-done';   badge = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>已完成</span>'; barColor = '#43a047';
+            badge = '<span class="db-badge done">✓ 已完成</span>'; barColor = '#43a047'; rowClass = 'table-success bg-opacity-25';
           } else if (noReply > 0) {
-            stClass = 'st-active'; badge = '<span class="badge bg-primary"><i class="fa-solid fa-spinner me-1"></i>進行中</span>'; barColor = '#1e88e5';
+            badge = '<span class="db-badge active">↻ 進行中</span>'; barColor = '#1e88e5';
           } else {
-            stClass = 'st-urgent'; badge = '<span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>需補充</span>'; barColor = '#e53935';
+            badge = '<span class="db-badge urgent">⚠ 需補充</span>'; barColor = '#e53935'; rowClass = 'table-danger bg-opacity-10';
           }
 
-          const bShortHtml = bShort !== null
-            ? `<div class="db-stat-item">
-                 <div class="db-stat-num ${bShort > 0 ? 'db-col-short' : ''}">${bShort}</div>
-                 <div class="db-stat-lbl">預備缺</div>
-               </div>`
-            : '';
+          const bShortTd = bShort !== null
+            ? `<td class="db-num ${bShort > 0 ? 'db-short' : ''}">${bShort}</td>` : '';
 
-          return `
-          <div class="col-12 col-sm-6 col-xl-4">
-            <div class="db-subject-card ${stClass}">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="db-subject-name">${name}</div>
-                ${badge}
-              </div>
-              <div class="db-prog-lbl">
-                <span>徵詢進度</span>
-                <span class="fw-semibold">${agree} / ${total} 人（${pct}%）</span>
-              </div>
-              <div class="db-prog-wrap">
-                <div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div>
-              </div>
-              <div class="db-stat-grid">
-                <div class="db-stat-item">
-                  <div class="db-stat-num">${admit}</div>
-                  <div class="db-stat-lbl">正取名額</div>
-                </div>
-                <div class="db-stat-item">
-                  <div class="db-stat-num db-col-agree">${agree}</div>
-                  <div class="db-stat-lbl">已同意</div>
-                </div>
-                <div class="db-stat-item">
-                  <div class="db-stat-num ${short > 0 ? 'db-col-short' : ''}">${short}</div>
-                  <div class="db-stat-lbl">尚缺</div>
-                </div>
-                <div class="db-stat-item">
-                  <div class="db-stat-num">${backup}</div>
-                  <div class="db-stat-lbl">預備名額</div>
-                </div>
-                <div class="db-stat-item">
-                  <div class="db-stat-num db-col-reject">${reject}</div>
-                  <div class="db-stat-lbl">已婉拒</div>
-                </div>
-                <div class="db-stat-item">
-                  <div class="db-stat-num db-col-noreply">${noReply}</div>
-                  <div class="db-stat-lbl">未回應</div>
-                </div>
-                ${bShortHtml}
-              </div>
-            </div>
-          </div>`;
+          return `<tr class="${rowClass}">
+            <td class="db-name">${name}</td>
+            <td>${badge}</td>
+            <td class="db-prog-cell">
+              <div class="db-prog-txt">${agree} / ${total} 人（${pct}%）</div>
+              <div class="db-prog-wrap"><div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div></div>
+            </td>
+            <td class="db-num">${admit}</td>
+            <td class="db-num">${backup}</td>
+            <td class="db-num db-agree">${agree}</td>
+            <td class="db-num ${short > 0 ? 'db-short fw-bold' : ''}">${short}</td>
+            <td class="db-num db-reject">${reject}</td>
+            <td class="db-num db-noreply">${noReply}</td>
+            ${bShortTd}
+          </tr>`;
         }).join('');
+
+        tbl.style.display = '';
 
         // 更新時間
         const now = new Date();
