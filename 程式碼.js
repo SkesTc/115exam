@@ -620,21 +620,47 @@ function getVenueBySubject(subject, venueMap) {
 // ── 自動將文字中所有 http(s) 網址轉成短網址 ──
 function shortenUrlsInText(text) {
   if (!text) return text;
-  // 比對 http/https URL（排除 HTML 屬性引號、中文標點、括號結尾）
-  const urlRegex = /https?:\/\/[^\s<>"'，。！？）\]\)]+/g;
-  const allUrls = text.match(urlRegex) || [];
-  const unique = [...new Set(allUrls)];
+
+  // 粗比對：先找所有 http(s) 開頭的字串（允許 href=" 與純文字兩種情境）
+  const raw = text.match(/https?:\/\/\S+/g) || [];
+
+  // 清理尾端不屬於網址的字元（HTML 屬性引號、標點等）
+  const cleanUrl = u => u.replace(/['"<>）\]）。，！？\.;:]+$/, '');
+
+  const unique = [...new Set(raw.map(cleanUrl).filter(Boolean))];
+  if (unique.length === 0) return text;   // 沒有網址，直接返回
+
   const cache = {};
-  for (const url of unique) {
-    // 跳過：追蹤像素、已是短網址（FRONTEND_URL/6碼）
-    if (url.includes('?track=') || url.includes('&track=')) continue;
-    if (new RegExp('^' + FRONTEND_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/[A-Za-z0-9]{6}$').test(url)) continue;
+  unique.forEach(url => {
+    // 跳過追蹤像素
+    if (url.includes('?track=') || url.includes('&track=')) return;
+    // 跳過已經是我們系統的短網址
+    if (url.startsWith(FRONTEND_URL + '/') && /\/[A-Za-z0-9]{6}$/.test(url)) return;
+
     try {
-      if (!cache[url]) cache[url] = createShortUrl(url);
-      text = text.split(url).join(cache[url]);
-    } catch(e) { Logger.log('shortenUrlsInText error: ' + url + ' – ' + e); }
-  }
+      const short = createShortUrl(url);
+      cache[url] = short;
+      Logger.log('[shortenUrls] ' + url + ' → ' + short);
+    } catch(e) {
+      Logger.log('[shortenUrls] FAILED ' + url + ' : ' + e.message);
+    }
+  });
+
+  // 把每個長網址替換成短網址（使用字串 split/join 避免 regex 特殊字元問題）
+  Object.entries(cache).forEach(([long, short]) => {
+    text = text.split(long).join(short);
+  });
+
   return text;
+}
+
+// ── 測試函式：可在 GAS 編輯器直接執行，查看 Logger 輸出 ──
+function testShortenUrls() {
+  const sample = '請點此連結確認出席：https://forms.gle/testABC123 謝謝。';
+  Logger.log('原文：' + sample);
+  const result = shortenUrlsInText(sample);
+  Logger.log('結果：' + result);
+  Logger.log(result === sample ? '❌ 未縮短（請確認 UrlShortener 分頁存在）' : '✅ 縮短成功');
 }
 
 // ── 行前通知：Email ──
