@@ -568,18 +568,22 @@ function adminSendPreNotice(ids) {
     const name        = data[i][1];
     const subject     = data[i][2];
     const email       = data[i][3];
-    const willingness = data[i][7];  // willingness column
-    const title       = data[i][13] || '';
+    const willingness = data[i][6];  // col 6 = willingness
+    const diet        = data[i][7] || '';  // col 7 = diet
+    const unit        = data[i][12] || ''; // col 12 = unit
+    const title       = data[i][13] || ''; // col 13 = title
 
     if (!ids.includes(uid)) continue;
-    if (willingness !== 'yes') continue;  // 只寄給同意的
+    if (willingness !== 'yes') continue;
     if (!email) continue;
 
     try {
       const body = templateStr
         .replace(/{{name}}/g, name)
         .replace(/{{title}}/g, title)
-        .replace(/{{subject}}/g, subject);
+        .replace(/{{subject}}/g, subject)
+        .replace(/{{unit}}/g, unit)
+        .replace(/{{diet}}/g, diet);
       GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
       count++;
     } catch(e) { console.error('PreNotice email error:', e); }
@@ -602,9 +606,11 @@ function adminSendPreNoticeSMS(ids, template) {
     const uid         = data[i][0];
     const name        = data[i][1];
     const subject     = data[i][2];
-    const phone       = data[i][4];
-    const willingness = data[i][7];
-    const title       = data[i][13] || '';
+    const phone       = data[i][11]; // col 11 = phone
+    const willingness = data[i][6];  // col 6 = willingness
+    const diet        = data[i][7] || '';  // col 7 = diet
+    const unit        = data[i][12] || ''; // col 12 = unit
+    const title       = data[i][13] || ''; // col 13 = title
 
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
@@ -613,7 +619,9 @@ function adminSendPreNoticeSMS(ids, template) {
     const msg = template
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
-      .replace(/{{科別}}/g, subject);
+      .replace(/{{科別}}/g, subject)
+      .replace(/{{單位}}/g, unit)
+      .replace(/{{飲食}}/g, diet);
 
     const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
     try {
