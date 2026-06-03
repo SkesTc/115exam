@@ -554,7 +554,12 @@
     $('#selectAll').on('click', function(){ $('.row-check').prop('checked', this.checked); });
     document.getElementById('addModal').addEventListener('hidden.bs.modal', function(){ $('#addForm')[0].reset(); $('#editUid').val(''); $('#modalTitle').text('新增委員'); $('#editBatch').val('1'); });
 
-    $('#filterBatch').on('change', function(){ if(dataTable) dataTable.column(1).search(this.value).draw(); });
+    $('#filterBatch').on('change', function(){
+      if(!dataTable) return;
+      const v = this.value;
+      const text = v === '1' ? '內聘' : v === '2' ? '外聘' : '';
+      dataTable.column(1).search(text).draw();
+    });
     $('#filterSubject').on('change', function(){ if(dataTable) dataTable.column(2).search(this.value).draw(); });
     // 👇 新增：狀態 (第 6 欄，index 為 5)
     $('#filterStatus').on('change', function(){ 
@@ -700,6 +705,7 @@ function reloadData() {
         d.headers.forEach((h, i) => { idx[h] = i; });
         const C = {
           name:     idx['科別'],
+          venue:    idx['考場'],
           inAdmit:  idx['內聘正取人數'],
           inBackup: idx['內聘預備人數'],
           outAdmit: idx['外聘正取人數'],
@@ -708,23 +714,29 @@ function reloadData() {
           reject:   idx['已婉拒'],
         };
         const si = v => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
+        const hasVenue = C.venue !== undefined;
 
         // ── 表頭 ──
-        theadRow.innerHTML = [
-          { label: '科別',       icon: 'fa-tag' },
-          { label: '狀態',       icon: 'fa-circle-info' },
-          { label: '徵詢進度',   icon: 'fa-bars-progress' },
-          { label: '內聘正取',   icon: 'fa-user-check' },
-          { label: '內聘預備',   icon: 'fa-user-clock' },
-          { label: '外聘正取',   icon: 'fa-user-plus' },
-          { label: '已同意',     icon: 'fa-circle-check' },
-          { label: '尚缺人數',   icon: 'fa-triangle-exclamation' },
-          { label: '已婉拒',     icon: 'fa-circle-xmark' },
-        ].map(c => `<th><i class="fa-solid ${c.icon} me-1 opacity-75"></i>${c.label}</th>`).join('');
+        const headCols = [
+          { label: '科別',     icon: 'fa-tag' },
+          ...(hasVenue ? [{ label: '考場', icon: 'fa-location-dot' }] : []),
+          { label: '狀態',     icon: 'fa-circle-info' },
+          { label: '徵詢進度', icon: 'fa-bars-progress' },
+          { label: '內聘正取', icon: 'fa-user-check' },
+          { label: '內聘預備', icon: 'fa-user-clock' },
+          { label: '外聘正取', icon: 'fa-user-plus' },
+          { label: '已同意',   icon: 'fa-circle-check' },
+          { label: '尚缺人數', icon: 'fa-triangle-exclamation' },
+          { label: '已婉拒',   icon: 'fa-circle-xmark' },
+        ];
+        theadRow.innerHTML = headCols.map(c =>
+          `<th><i class="fa-solid ${c.icon} me-1 opacity-75"></i>${c.label}</th>`
+        ).join('');
 
         // ── 資料列 ──
         tbody.innerHTML = d.rows.map(row => {
           const name     = row[C.name] ?? '';
+          const venue    = hasVenue ? (row[C.venue] ?? '') : '';
           const inAdmit  = si(row[C.inAdmit]);
           const inBackup = si(row[C.inBackup]);
           const outAdmit = si(row[C.outAdmit]);
@@ -761,8 +773,10 @@ function reloadData() {
                  <div class="db-prog-wrap"><div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div></div>
                </td>`;
 
+          const venueTd = hasVenue ? `<td class="fw-semibold" style="white-space:nowrap;">${venue}</td>` : '';
           return `<tr class="${rowClass}">
             <td class="db-name">${name}</td>
+            ${venueTd}
             <td>${badge}</td>
             ${progCell}
             <td class="db-num">${inAdmit  || ''}</td>

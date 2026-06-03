@@ -151,6 +151,7 @@ function adminExportSmsData(ids) {
 function adminExportPreNoticeSmsData(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
 
   const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(飲食)", "參數五(職稱)"];
   let exportData = [headers];
@@ -162,14 +163,13 @@ function adminExportPreNoticeSmsData(ids) {
     const phoneRaw    = data[i][11];
     const willingness = data[i][6];
     const diet        = data[i][7] || '';
-    const unit        = data[i][12] || '';
     const title       = data[i][13] || '';
 
     if (!ids.includes(uid)) continue;
-    if (willingness !== 'yes') continue;   // 只含已同意
+    if (willingness !== 'yes') continue;
 
     const phone = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
-    const venue = getVenueBySubject(subject);
+    const venue = getVenueBySubject(subject, venueMap);
 
     exportData.push([name, phone, '', '', name, venue, subject, diet, title]);
   }
@@ -586,23 +586,33 @@ const payload = {
   return { status: 'success', count: successCount, logs: logs };
 }
 
-// ── 科別 → 考場對應表 ──
-function getVenueBySubject(subject) {
-  const VENUE_MAP = {
-    '國小普通教師':       '西苑高中',
-    '國小特殊教育教師':   '西苑高中',
-    '幼兒園學前特殊教育教師': '西苑高中',
-    '國小英語專長教師':   '嶺東中學',
-    '幼兒園普通教師':     '嶺東中學',
-    '國小音樂專長教師':   '嶺東中學',
-    '國小美勞專長教師':   '嶺東中學',
-    '國小體育專長教師':   '嶺東中學',
-    '國小自然專長教師':   '嶺東中學',
-    '國小專任輔導教師':   '嶺東中學',
-  };
-  // 科別欄位含【口試】/【試教】後綴，用包含比對
-  for (const key of Object.keys(VENUE_MAP)) {
-    if (subject.includes(key)) return VENUE_MAP[key];
+// ── 從 Dashboard 分頁建立「科別 → 考場」對應表 ──
+function buildVenueMap() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dashboard');
+  if (!sheet) return {};
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return {};
+  const headers = data[0].map(h => String(h).trim());
+  const subjectIdx = headers.indexOf('科別');
+  const venueIdx   = headers.indexOf('考場');
+  if (subjectIdx === -1 || venueIdx === -1) return {};
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const s = String(data[i][subjectIdx]).trim();
+    const v = String(data[i][venueIdx]).trim();
+    if (s && v) map[s] = v;
+  }
+  return map;
+}
+
+// ── 科別 → 考場查詢（傳入預先建好的 map 避免重複讀表） ──
+function getVenueBySubject(subject, venueMap) {
+  if (!venueMap) venueMap = buildVenueMap();
+  // 完全比對
+  if (venueMap[subject]) return venueMap[subject];
+  // 部分比對（科別含【口試】/【試教】後綴時）
+  for (const key of Object.keys(venueMap)) {
+    if (subject.includes(key) || key.includes(subject)) return venueMap[key];
   }
   return '（請確認考場）';
 }
@@ -614,23 +624,24 @@ function adminSendPreNotice(ids) {
   let templateStr = getSettingValue('TEMPLATE_EMAIL_PRENOTICE');
   if (!templateStr) templateStr = '<p><strong>{{name}}</strong> {{title}} 您好，<br>感謝您確認參與本次教師甄試委員工作，敬請留意後續行前通知事項。</p>';
 
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
   let count = 0;
   for (let i = 1; i < data.length; i++) {
     const uid         = data[i][0];
     const name        = data[i][1];
     const subject     = data[i][2];
     const email       = data[i][3];
-    const willingness = data[i][6];  // col 6 = willingness
-    const diet        = data[i][7] || '';  // col 7 = diet
-    const unit        = data[i][12] || ''; // col 12 = unit
-    const title       = data[i][13] || ''; // col 13 = title
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+    const unit        = data[i][12] || '';
+    const title       = data[i][13] || '';
 
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
     if (!email) continue;
 
     try {
-      const venue = getVenueBySubject(subject);
+      const venue = getVenueBySubject(subject, venueMap);
       const body = templateStr
         .replace(/{{name}}/g, name)
         .replace(/{{title}}/g, title)
@@ -655,22 +666,23 @@ function adminSendPreNoticeSMS(ids, template) {
   const SMS_PASSWORD = props.getProperty('SMS_PASSWORD');
   if (!SMS_USER || !SMS_PASSWORD) return { status: 'error', message: '尚未設定簡訊帳號密碼' };
 
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
   let logs = [], successCount = 0;
   for (let i = 1; i < data.length; i++) {
     const uid         = data[i][0];
     const name        = data[i][1];
     const subject     = data[i][2];
-    const phone       = data[i][11]; // col 11 = phone
-    const willingness = data[i][6];  // col 6 = willingness
-    const diet        = data[i][7] || '';  // col 7 = diet
-    const unit        = data[i][12] || ''; // col 12 = unit
-    const title       = data[i][13] || ''; // col 13 = title
+    const phone       = data[i][11];
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+    const unit        = data[i][12] || '';
+    const title       = data[i][13] || '';
 
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
     if (!phone) continue;
 
-    const venue = getVenueBySubject(subject);
+    const venue = getVenueBySubject(subject, venueMap);
     const msg = template
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
