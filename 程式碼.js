@@ -617,6 +617,26 @@ function getVenueBySubject(subject, venueMap) {
   return '（請確認考場）';
 }
 
+// ── 自動將文字中所有 http(s) 網址轉成短網址 ──
+function shortenUrlsInText(text) {
+  if (!text) return text;
+  // 比對 http/https URL（排除 HTML 屬性引號、中文標點、括號結尾）
+  const urlRegex = /https?:\/\/[^\s<>"'，。！？）\]\)]+/g;
+  const allUrls = text.match(urlRegex) || [];
+  const unique = [...new Set(allUrls)];
+  const cache = {};
+  for (const url of unique) {
+    // 跳過：追蹤像素、已是短網址（FRONTEND_URL/6碼）
+    if (url.includes('?track=') || url.includes('&track=')) continue;
+    if (new RegExp('^' + FRONTEND_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/[A-Za-z0-9]{6}$').test(url)) continue;
+    try {
+      if (!cache[url]) cache[url] = createShortUrl(url);
+      text = text.split(url).join(cache[url]);
+    } catch(e) { Logger.log('shortenUrlsInText error: ' + url + ' – ' + e); }
+  }
+  return text;
+}
+
 // ── 行前通知：Email ──
 function adminSendPreNotice(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -642,13 +662,14 @@ function adminSendPreNotice(ids) {
 
     try {
       const venue = getVenueBySubject(subject, venueMap);
-      const body = templateStr
+      let body = templateStr
         .replace(/{{name}}/g, name)
         .replace(/{{title}}/g, title)
         .replace(/{{subject}}/g, subject)
         .replace(/{{unit}}/g, unit)
         .replace(/{{diet}}/g, diet)
         .replace(/{{venue}}/g, venue);
+      body = shortenUrlsInText(body);   // 自動縮短信件中的網址
       GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
       count++;
     } catch(e) { console.error('PreNotice email error:', e); }
@@ -683,13 +704,13 @@ function adminSendPreNoticeSMS(ids, template) {
     if (!phone) continue;
 
     const venue = getVenueBySubject(subject, venueMap);
-    const msg = template
+    const msg = shortenUrlsInText(template  // 自動縮短簡訊中的網址
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
       .replace(/{{科別}}/g, subject)
       .replace(/{{單位}}/g, unit)
       .replace(/{{飲食}}/g, diet)
-      .replace(/{{考場}}/g, venue);
+      .replace(/{{考場}}/g, venue));
 
     const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
     try {
