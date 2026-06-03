@@ -555,6 +555,27 @@ const payload = {
   return { status: 'success', count: successCount, logs: logs };
 }
 
+// ── 科別 → 考場對應表 ──
+function getVenueBySubject(subject) {
+  const VENUE_MAP = {
+    '國小普通教師':       '西苑高中',
+    '國小特殊教育教師':   '西苑高中',
+    '幼兒園學前特殊教育教師': '西苑高中',
+    '國小英語專長教師':   '嶺東中學',
+    '幼兒園普通教師':     '嶺東中學',
+    '國小音樂專長教師':   '嶺東中學',
+    '國小美勞專長教師':   '嶺東中學',
+    '國小體育專長教師':   '嶺東中學',
+    '國小自然專長教師':   '嶺東中學',
+    '國小專任輔導教師':   '嶺東中學',
+  };
+  // 科別欄位含【口試】/【試教】後綴，用包含比對
+  for (const key of Object.keys(VENUE_MAP)) {
+    if (subject.includes(key)) return VENUE_MAP[key];
+  }
+  return '（請確認考場）';
+}
+
 // ── 行前通知：Email ──
 function adminSendPreNotice(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -578,12 +599,14 @@ function adminSendPreNotice(ids) {
     if (!email) continue;
 
     try {
+      const venue = getVenueBySubject(subject);
       const body = templateStr
         .replace(/{{name}}/g, name)
         .replace(/{{title}}/g, title)
         .replace(/{{subject}}/g, subject)
         .replace(/{{unit}}/g, unit)
-        .replace(/{{diet}}/g, diet);
+        .replace(/{{diet}}/g, diet)
+        .replace(/{{venue}}/g, venue);
       GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
       count++;
     } catch(e) { console.error('PreNotice email error:', e); }
@@ -616,12 +639,14 @@ function adminSendPreNoticeSMS(ids, template) {
     if (willingness !== 'yes') continue;
     if (!phone) continue;
 
+    const venue = getVenueBySubject(subject);
     const msg = template
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
       .replace(/{{科別}}/g, subject)
       .replace(/{{單位}}/g, unit)
-      .replace(/{{飲食}}/g, diet);
+      .replace(/{{飲食}}/g, diet)
+      .replace(/{{考場}}/g, venue);
 
     const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
     try {
