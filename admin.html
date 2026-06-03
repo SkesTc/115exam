@@ -211,8 +211,12 @@
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-layer-group me-1"></i>梯次:</label>
         <select id="filterBatch" class="form-select filter-box" style="width: auto; min-width: 90px;">
           <option value="">全部</option>
-          <option value="1">內聘</option>
-          <option value="2">外聘</option>
+          <option value="1">第1梯</option>
+          <option value="2">第2梯</option>
+          <option value="3">第3梯</option>
+          <option value="4">第4梯</option>
+          <option value="5">第5梯</option>
+          <option value="6">第6梯</option>
         </select>
 
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-filter me-1"></i>科別:</label>
@@ -260,7 +264,7 @@
       <div class="d-flex gap-2 flex-wrap justify-content-end">
         <button class="btn btn-primary admin-only" data-bs-toggle="modal" data-bs-target="#addModal"><i class="fa-solid fa-plus me-1"></i>新增</button>
         <button class="btn btn-success admin-only" data-bs-toggle="modal" data-bs-target="#importModal"><i class="fa-solid fa-file-import me-1"></i>匯入</button>
-        <button class="btn btn-secondary" onclick="exportCSV()"><i class="fa-solid fa-file-export me-1"></i>匯出</button>
+        <button class="btn btn-secondary" onclick="openExportModal()"><i class="fa-solid fa-file-export me-1"></i>匯出</button>
 
         <button class="btn btn-dark admin-only" onclick="openTemplateModal()"><i class="fa-solid fa-pen-to-square me-1"></i>範本設定</button>
 
@@ -269,6 +273,9 @@
         <!--<button class="btn btn-info text-white admin-only" onclick="openSMSModal()"><i class="fa-regular fa-comment-dots me-1"></i>簡訊</button>-->
         <button class="btn btn-outline-success btn-sm me-2 admin-only" onclick="exportSmsExcel()">
         <i class="fas fa-file-csv"></i> 簡訊批次檔</button>
+        <div class="vr admin-only"></div>
+        <button class="btn btn-info text-white admin-only" onclick="sendPreNoticeEmail()"><i class="fa-solid fa-bell me-1"></i>行前通知(信)</button>
+        <button class="btn btn-outline-info admin-only" onclick="openPreNoticeSmsModal()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊)</button>
         <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
       </div>
     </div>
@@ -299,7 +306,7 @@
       
       <div class="row g-2">
         <div class="col-md-4 mb-3"><label>姓名</label><input type="text" class="form-control" name="name" id="editName" required></div>
-        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
+        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">第1梯</option><option value="2">第2梯</option><option value="3">第3梯</option><option value="4">第4梯</option><option value="5">第5梯</option></select></div>
         <div class="col-md-4 mb-3"><label>科別</label><select class="form-select" name="subject" id="editSubject">
                     <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
@@ -350,7 +357,7 @@
     <div class="tab-content">
       <div class="tab-pane fade show active" id="text-pane">
         <div class="row g-2 mb-2">
-            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
+            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">第1梯</option><option value="2">第2梯</option><option value="3">第3梯</option><option value="4">第4梯</option><option value="5">第5梯</option></select></div>
             <div class="col-6"><label>設定科別</label><select class="form-select" id="importSubject">
           <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
@@ -414,7 +421,12 @@
   <div class="modal fade" id="templateModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title fw-bold">編輯通知範本</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-      <ul class="nav nav-tabs mb-3"><li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tpl-email-pane">邀請信</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tpl-sms-pane">簡訊 (純文字)</button></li><li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tpl-confirm-pane">確認信</button></li></ul>
+      <ul class="nav nav-tabs mb-3">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tpl-email-pane">邀請信</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tpl-sms-pane">邀請簡訊</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tpl-confirm-pane">確認信</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tpl-prenotice-pane"><i class="fa-solid fa-bell me-1 text-info"></i>行前通知</button></li>
+      </ul>
       <form id="templateForm"><div class="tab-content">
           <div class="tab-pane fade show active" id="tpl-email-pane">
             <div class="alert alert-info py-2 small"><i class="fa-solid fa-circle-info me-1"></i> 變數請使用：<code>{{name}}</code> (姓名)、<code>{{link}}</code> (連結)、<code>{{title}}</code> (職稱)</div>
@@ -432,6 +444,14 @@
             <div class="form-text mb-1">變數：<code>{{name}}</code></div>
             <textarea class="form-control" id="tpl_confirm_no" name="tpl_confirm_no"></textarea>
           </div>
+          <div class="tab-pane fade" id="tpl-prenotice-pane">
+            <h6 class="fw-bold mt-2"><i class="fa-solid fa-envelope me-1 text-info"></i>行前通知信（HTML）</h6>
+            <div class="alert alert-info py-2 small">僅寄給已同意的委員。變數：<code>{{name}}</code>（姓名）、<code>{{title}}</code>（職稱）、<code>{{subject}}</code>（科別）</div>
+            <textarea class="form-control mb-4" id="tpl_prenotice_email" name="tpl_prenotice_email"></textarea>
+            <h6 class="fw-bold"><i class="fa-solid fa-comment-sms me-1 text-info"></i>行前通知簡訊（純文字）</h6>
+            <div class="form-text mb-1">變數：<code>{{姓名}}</code>、<code>{{職稱}}</code>、<code>{{科別}}</code></div>
+            <textarea class="form-control" id="tpl_prenotice_sms" name="tpl_prenotice_sms" rows="5"></textarea>
+          </div>
       </div></form>
     </div>
     <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="saveTemplates()">儲存設定</button></div>
@@ -441,6 +461,61 @@
     <div class="modal-header bg-light"><h5 class="modal-title fw-bold" id="detailModalTitle">詳細數據</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body p-0"><ul class="list-group list-group-flush" id="detailList"></ul></div>
     <div class="modal-footer p-2 justify-content-center bg-light"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">關閉</button></div>
+  </div></div></div>
+
+  <!-- ★ 匯出選擇 Modal ★ -->
+  <div class="modal fade" id="exportModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title fw-bold"><i class="fa-solid fa-file-export me-2"></i>匯出設定</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <label class="fw-bold">科別</label>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" onclick="exportCheckAll(true)">全選</button>
+            <button class="btn btn-outline-secondary" onclick="exportCheckAll(false)">取消全選</button>
+          </div>
+        </div>
+        <div id="export-subject-list" class="border rounded p-2" style="max-height:240px; overflow-y:auto; column-count:1;"></div>
+      </div>
+      <div class="row g-2">
+        <div class="col-6">
+          <label class="fw-bold mb-1">梯次</label>
+          <select class="form-select form-select-sm" id="export-batch">
+            <option value="">全部</option>
+            <option value="1">第1梯</option><option value="2">第2梯</option>
+            <option value="3">第3梯</option><option value="4">第4梯</option>
+            <option value="5">第5梯</option><option value="6">第6梯</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="fw-bold mb-1">回覆狀態</label>
+          <select class="form-select form-select-sm" id="export-reply">
+            <option value="">全部</option>
+            <option value="yes">僅同意</option>
+            <option value="no">僅婉拒</option>
+            <option value="none">未回覆</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button type="button" class="btn btn-primary" onclick="doExportCSV()"><i class="fa-solid fa-download me-1"></i>匯出 CSV</button>
+    </div>
+  </div></div></div>
+
+  <!-- ★ 行前通知簡訊 Modal ★ -->
+  <div class="modal fade" id="preNoticeSmsModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title fw-bold"><i class="fa-solid fa-bell me-2"></i>行前通知 — 簡訊</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <div class="alert alert-info small py-2">僅發送給已勾選且回覆「<strong>同意</strong>」的委員。</div>
+      <div class="mb-3"><label>簡訊內容</label><textarea class="form-control" id="preNoticeSmsTemplate" rows="5"></textarea><div class="form-text text-muted">變數：<code>{{姓名}}</code>、<code>{{職稱}}</code></div></div>
+      <div id="preNoticeSmsPreview" class="border p-2 bg-light d-none" style="max-height:150px;overflow-y:auto;font-size:0.9rem;"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+      <button type="button" class="btn btn-info text-white" onclick="sendPreNoticeSms()"><i class="fa-regular fa-paper-plane me-1"></i>開始發送</button>
+    </div>
   </div></div></div>
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -1011,6 +1086,106 @@ function exportSmsExcel() {
 }
 
 
+  // ── 匯出 Modal ──
+  function openExportModal() {
+    if (!globalData || !globalData.list || globalData.list.length === 0) return alert("無資料");
+    // 從資料動態產生科別清單
+    const subjects = [...new Set(globalData.list.map(r => r.subject).filter(Boolean))].sort();
+    document.getElementById('export-subject-list').innerHTML = subjects.map(s => {
+      const id = 'ec_' + s.replace(/\W/g, '_');
+      return `<div class="form-check"><input class="form-check-input export-subject-check" type="checkbox" value="${s}" id="${id}" checked><label class="form-check-label" for="${id}">${s}</label></div>`;
+    }).join('');
+    // viewer 預設回覆篩選同意
+    if (window.userRole === 'viewer') document.getElementById('export-reply').value = 'yes';
+    new bootstrap.Modal(document.getElementById('exportModal')).show();
+  }
+
+  function exportCheckAll(checked) {
+    document.querySelectorAll('.export-subject-check').forEach(cb => cb.checked = checked);
+  }
+
+  function doExportCSV() {
+    const isViewer = (window.userRole === 'viewer');
+    const selectedSubjects = new Set([...document.querySelectorAll('.export-subject-check:checked')].map(cb => cb.value));
+    const batchFilter = document.getElementById('export-batch').value;
+    const replyFilter = document.getElementById('export-reply').value;
+
+    const de = globalData.list.filter(r => {
+      if (isViewer && r.willingness !== 'yes') return false;
+      if (!selectedSubjects.has(r.subject)) return false;
+      if (batchFilter && String(r.batch) !== batchFilter) return false;
+      if (replyFilter === 'yes'  && r.willingness !== 'yes') return false;
+      if (replyFilter === 'no'   && r.willingness !== 'no') return false;
+      if (replyFilter === 'none' && r.willingness && r.willingness.trim() !== '') return false;
+      return true;
+    });
+    if (de.length === 0) return alert("無資料可匯出");
+    _generateCSV(de);
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+  }
+
+  function _generateCSV(de) {
+    let c = "﻿梯次,科別,姓名,單位,職稱,飲食,Email,電話,信件狀態,意願,回覆時間,備註\n";
+    de.forEach(r => {
+      let wt = ""; if (r.willingness === "yes") wt = "同意"; else if (r.willingness === "no") wt = "婉拒";
+      const sn = (r.note || "").replace(/\n/g, " ").replace(/"/g, '""');
+      const ps = r.phone ? `="${r.phone}"` : "";
+      const cr = [r.batch, r.subject, r.name, r.unit||"", r.title||"", r.diet||"", r.email, ps, r.status, wt, r.replyTime||"", sn]
+        .map(f => { if (String(f).startsWith('="')) return f; return `"${String(f).replace(/"/g, '""')}"`; }).join(",");
+      c += cr + "\n";
+    });
+    const b = new Blob([c], {type: 'text/csv;charset=utf-8;'});
+    const l = document.createElement("a");
+    l.href = URL.createObjectURL(b);
+    l.download = `教甄委員_${new Date().toISOString().slice(0,10)}.csv`;
+    l.style.visibility = 'hidden'; document.body.appendChild(l); l.click(); document.body.removeChild(l);
+  }
+
+  // ── 行前通知 ──
+  function sendPreNoticeEmail() {
+    const ids = getSelected(); if (ids.length === 0) return alert('未勾選任何委員');
+    if (!confirm(`確定對已勾選且同意的委員發送行前通知信？`)) return;
+    $('#loading-overlay').show();
+    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'adminSendPreNotice', data: ids }) })
+      .then(res => res.json())
+      .then(r => {
+        $('#loading-overlay').hide();
+        const d = r.data || r;
+        alert(`行前通知信已發送完成，共 ${d.count || 0} 封。`);
+        reloadData();
+      })
+      .catch(() => { $('#loading-overlay').hide(); alert("發送失敗，請稍後再試。"); });
+  }
+
+  function openPreNoticeSmsModal() {
+    if (getSelected().length === 0) return alert('未勾選任何委員');
+    // 載入已儲存的簡訊範本
+    fetch(`${API_URL}?action=getSettingsData`).then(res => res.json()).then(r => {
+      const s = r.data || r;
+      document.getElementById('preNoticeSmsTemplate').value = s['TEMPLATE_SMS_PRENOTICE'] || '';
+      document.getElementById('preNoticeSmsPreview').classList.add('d-none');
+      new bootstrap.Modal(document.getElementById('preNoticeSmsModal')).show();
+    });
+  }
+
+  function sendPreNoticeSms() {
+    const template = document.getElementById('preNoticeSmsTemplate').value;
+    if (!template.trim()) return alert("請先填寫簡訊內容");
+    const previewEl = document.getElementById('preNoticeSmsPreview');
+    previewEl.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> 發送中...</div>';
+    previewEl.classList.remove('d-none');
+    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'adminSendPreNoticeSMS', data: { ids: getSelected(), template } }) })
+      .then(res => res.json())
+      .then(r => {
+        const d = r.data || r;
+        if (r.status === 'error') { previewEl.innerHTML = `<div class="text-danger">${r.message}</div>`; return; }
+        let h = `<div class="text-success fw-bold mb-2">成功：${d.count} 則</div><ul>`;
+        if (d.logs) d.logs.forEach(l => h += `<li>${l.name}：${l.msg}</li>`);
+        h += '</ul>'; previewEl.innerHTML = h;
+        reloadData();
+      });
+  }
+
  function exportCSV() {
     if(!globalData||!globalData.list||globalData.list.length===0)return alert("無資料");
 
@@ -1174,7 +1349,9 @@ function exportSmsExcel() {
       $('#tpl_email_invite').summernote('code', s['TEMPLATE_EMAIL_INVITE']||'');
       $('#tpl_confirm_yes').summernote('code', s['TEMPLATE_EMAIL_CONFIRM_YES']||'');
       $('#tpl_confirm_no').summernote('code', s['TEMPLATE_EMAIL_CONFIRM_NO']||'');
-      $('#tpl_sms').val(s['TEMPLATE_SMS']||''); 
+      $('#tpl_prenotice_email').summernote('code', s['TEMPLATE_EMAIL_PRENOTICE']||'');
+      $('#tpl_sms').val(s['TEMPLATE_SMS']||'');
+      $('#tpl_prenotice_sms').val(s['TEMPLATE_SMS_PRENOTICE']||'');
       new bootstrap.Modal(document.getElementById('templateModal')).show(); 
     }).catch(e=>{$('#loading-overlay').hide();});
   }
@@ -1182,10 +1359,12 @@ function exportSmsExcel() {
   function saveTemplates(){
     if(!confirm("確定儲存?")) return;
     const o = {
-      tpl_email_invite: $('#tpl_email_invite').summernote('code'),
-      tpl_confirm_yes: $('#tpl_confirm_yes').summernote('code'),
-      tpl_confirm_no: $('#tpl_confirm_no').summernote('code'),
-      tpl_sms: $('#tpl_sms').val()
+      tpl_email_invite:    $('#tpl_email_invite').summernote('code'),
+      tpl_confirm_yes:     $('#tpl_confirm_yes').summernote('code'),
+      tpl_confirm_no:      $('#tpl_confirm_no').summernote('code'),
+      tpl_sms:             $('#tpl_sms').val(),
+      tpl_prenotice_email: $('#tpl_prenotice_email').summernote('code'),
+      tpl_prenotice_sms:   $('#tpl_prenotice_sms').val()
     };
     $('#loading-overlay').show();
     fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSettingsData', data: o }) })

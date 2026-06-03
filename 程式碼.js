@@ -78,6 +78,8 @@ function doPost(e) {
     else if (action === 'adminResendEmails') { responseData = adminResendEmails(payload); }
     else if (action === 'saveSmsConfig') { responseData = saveSmsConfig(payload.account, payload.password); }
     else if (action === 'adminSendSMS') { responseData = adminSendSMS(payload.ids, payload.template); }
+    else if (action === 'adminSendPreNotice') { responseData = adminSendPreNotice(payload); }
+    else if (action === 'adminSendPreNoticeSMS') { responseData = adminSendPreNoticeSMS(payload.ids, payload.template); }
     else if (action === 'saveSettingsData') { responseData = saveSettingsData(payload); }
     else if (action === 'submitForm') { responseData = submitForm(payload); }
     else if (action === 'verifyLogin') { responseData = verifyLogin(payload.username, payload.password); }
@@ -168,10 +170,12 @@ function saveSettingsData(formObj) {
   if (!sheet) sheet = ss.insertSheet(SETTINGS_SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   const updates = {
-    'TEMPLATE_EMAIL_INVITE': formObj.tpl_email_invite,
-    'TEMPLATE_SMS': formObj.tpl_sms,
+    'TEMPLATE_EMAIL_INVITE':    formObj.tpl_email_invite,
+    'TEMPLATE_SMS':             formObj.tpl_sms,
     'TEMPLATE_EMAIL_CONFIRM_YES': formObj.tpl_confirm_yes,
-    'TEMPLATE_EMAIL_CONFIRM_NO': formObj.tpl_confirm_no
+    'TEMPLATE_EMAIL_CONFIRM_NO':  formObj.tpl_confirm_no,
+    'TEMPLATE_EMAIL_PRENOTICE': formObj.tpl_prenotice_email,
+    'TEMPLATE_SMS_PRENOTICE':   formObj.tpl_prenotice_sms
   };
   
   for (let i = 1; i < data.length; i++) {
@@ -549,6 +553,84 @@ const payload = {
   }
 
   return { status: 'success', count: successCount, logs: logs };
+}
+
+// ── 行前通知：Email ──
+function adminSendPreNotice(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  let templateStr = getSettingValue('TEMPLATE_EMAIL_PRENOTICE');
+  if (!templateStr) templateStr = '<p><strong>{{name}}</strong> {{title}} 您好，<br>感謝您確認參與本次教師甄試委員工作，敬請留意後續行前通知事項。</p>';
+
+  let count = 0;
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1];
+    const subject     = data[i][2];
+    const email       = data[i][3];
+    const willingness = data[i][7];  // willingness column
+    const title       = data[i][13] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;  // 只寄給同意的
+    if (!email) continue;
+
+    try {
+      const body = templateStr
+        .replace(/{{name}}/g, name)
+        .replace(/{{title}}/g, title)
+        .replace(/{{subject}}/g, subject);
+      GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
+      count++;
+    } catch(e) { console.error('PreNotice email error:', e); }
+  }
+  SpreadsheetApp.flush();
+  return { status: 'success', count: count };
+}
+
+// ── 行前通知：簡訊 ──
+function adminSendPreNoticeSMS(ids, template) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const props = PropertiesService.getScriptProperties();
+  const SMS_USER = props.getProperty('SMS_ACCOUNT');
+  const SMS_PASSWORD = props.getProperty('SMS_PASSWORD');
+  if (!SMS_USER || !SMS_PASSWORD) return { status: 'error', message: '尚未設定簡訊帳號密碼' };
+
+  let logs = [], successCount = 0;
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1];
+    const subject     = data[i][2];
+    const phone       = data[i][4];
+    const willingness = data[i][7];
+    const title       = data[i][13] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+    if (!phone) continue;
+
+    const msg = template
+      .replace(/{{姓名}}/g, name)
+      .replace(/{{職稱}}/g, title)
+      .replace(/{{科別}}/g, subject);
+
+    const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
+    try {
+      const response = UrlFetchApp.fetch("https://new.e8d.tw/API21/HTTP/sendSMS.ashx", {
+        method: 'post', contentType: 'application/x-www-form-urlencoded', payload, muteHttpExceptions: true
+      });
+      const parts = response.getContentText().trim().split(',');
+      const first = parseFloat(parts[0]);
+      if (!isNaN(first) && first < 0) {
+        logs.push({ name, msg: '失敗 (代碼:' + parts[0] + ')' });
+      } else {
+        logs.push({ name, msg: '成功 (餘額:' + parts[0] + ')' });
+        successCount++;
+      }
+    } catch(e) { logs.push({ name, msg: '連線錯誤：' + e.message }); }
+  }
+  return { status: 'success', count: successCount, logs };
 }
 
 function getShortUrl(l){
