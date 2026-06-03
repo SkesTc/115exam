@@ -120,11 +120,19 @@
             .then(response => response.json())
             .then(result => {
               const resData = result.data ? result.data : result;
-              if (result.status === 'success' && resData.uid) {
-                // 成功解析出 UID，開始載入委員資料
-                loadCandidateData(resData.uid);
+              if (result.status === 'success') {
+                if (resData.type === 'redirect' && resData.url) {
+                  // 外部連結（行前通知表單等）→ 直接跳轉
+                  window.location.replace(resData.url);
+                } else if (resData.uid) {
+                  // 候選人邀請連結 → 載入回覆表單
+                  loadCandidateData(resData.uid);
+                } else {
+                  document.getElementById('loading').style.display = 'none';
+                  document.getElementById('error-msg').classList.remove('hidden');
+                  alert("此連結已失效或錯誤。");
+                }
               } else {
-                // 解析失敗 (代碼錯誤或過期)
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error-msg').classList.remove('hidden');
                 alert("此連結已失效或錯誤。");

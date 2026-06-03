@@ -1054,13 +1054,13 @@ function resolveShortCode(shortCode) {
       const currentClicks = Number(data[i][3]) || 0;
       sheet.getRange(i + 1, 4).setValue(currentClicks + 1);
       
-      // 從長網址中切出 uid 回傳給前端
+      // 候選人邀請連結（含 uid）→ 回傳 uid 給前端載入回覆表單
       const uidMatch = longUrl.match(/uid=([^&]+)/);
       if (uidMatch) {
-        return { uid: uidMatch[1] };
-      } else {
-        throw new Error("短網址對應的連結中找不到 UID");
+        return { uid: uidMatch[1], type: 'candidate' };
       }
+      // 其他任意外部連結（行前通知、表單等）→ 回傳原始 URL 讓前端直接跳轉
+      return { url: longUrl, type: 'redirect' };
     }
   }
   
