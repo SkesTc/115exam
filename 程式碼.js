@@ -84,6 +84,7 @@ function doPost(e) {
     else if (action === 'submitForm') { responseData = submitForm(payload); }
     else if (action === 'verifyLogin') { responseData = verifyLogin(payload.username, payload.password); }
     else if (action === 'adminExportSmsData') { responseData = adminExportSmsData(payload.ids); }
+    else if (action === 'adminExportPreNoticeSmsData') { responseData = adminExportPreNoticeSmsData(payload.ids); }
     else {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 POST 請求' })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -146,6 +147,36 @@ function adminExportSmsData(ids) {
   
   return { status: 'success', excelData: exportData };
 }
+// ── 行前通知簡訊批次檔 (EVERY8D 格式，只含已同意委員) ──
+function adminExportPreNoticeSmsData(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+
+  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(飲食)", "參數五(職稱)"];
+  let exportData = [headers];
+
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1] || '';
+    const subject     = data[i][2] || '';
+    const phoneRaw    = data[i][11];
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+    const unit        = data[i][12] || '';
+    const title       = data[i][13] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;   // 只含已同意
+
+    const phone = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
+    const venue = getVenueBySubject(subject);
+
+    exportData.push([name, phone, '', '', name, venue, subject, diet, title]);
+  }
+
+  return { status: 'success', excelData: exportData };
+}
+
 // ==========================================
 // 2. 系統設定與範本存取 (Settings)
 // ==========================================

@@ -211,12 +211,8 @@
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-layer-group me-1"></i>梯次:</label>
         <select id="filterBatch" class="form-select filter-box" style="width: auto; min-width: 90px;">
           <option value="">全部</option>
-          <option value="1">第1梯</option>
-          <option value="2">第2梯</option>
-          <option value="3">第3梯</option>
-          <option value="4">第4梯</option>
-          <option value="5">第5梯</option>
-          <option value="6">第6梯</option>
+          <option value="1">內聘</option>
+          <option value="2">外聘</option>
         </select>
 
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-filter me-1"></i>科別:</label>
@@ -275,7 +271,7 @@
         <i class="fas fa-file-csv"></i> 簡訊批次檔</button>
         <div class="vr admin-only"></div>
         <button class="btn btn-info text-white admin-only" onclick="sendPreNoticeEmail()"><i class="fa-solid fa-bell me-1"></i>行前通知(信)</button>
-        <button class="btn btn-outline-info admin-only" onclick="openPreNoticeSmsModal()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊)</button>
+        <button class="btn btn-outline-info admin-only" onclick="exportPreNoticeSmsExcel()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊批次檔)</button>
         <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
       </div>
     </div>
@@ -306,7 +302,7 @@
       
       <div class="row g-2">
         <div class="col-md-4 mb-3"><label>姓名</label><input type="text" class="form-control" name="name" id="editName" required></div>
-        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">第1梯</option><option value="2">第2梯</option><option value="3">第3梯</option><option value="4">第4梯</option><option value="5">第5梯</option></select></div>
+        <div class="col-md-4 mb-3"><label>梯次</label><select class="form-select" name="batch" id="editBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
         <div class="col-md-4 mb-3"><label>科別</label><select class="form-select" name="subject" id="editSubject">
                     <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
@@ -357,7 +353,7 @@
     <div class="tab-content">
       <div class="tab-pane fade show active" id="text-pane">
         <div class="row g-2 mb-2">
-            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">第1梯</option><option value="2">第2梯</option><option value="3">第3梯</option><option value="4">第4梯</option><option value="5">第5梯</option></select></div>
+            <div class="col-6"><label>設定梯次</label><select class="form-select" id="importBatch"><option value="1">內聘</option><option value="2">外聘</option></select></div>
             <div class="col-6"><label>設定科別</label><select class="form-select" id="importSubject">
           <option value="國小普通教師【口試】">國小普通教師【口試】</option>
           <option value="國小英語專長教師【口試】">國小英語專長教師【口試】</option>
@@ -482,9 +478,8 @@
           <label class="fw-bold mb-1">梯次</label>
           <select class="form-select form-select-sm" id="export-batch">
             <option value="">全部</option>
-            <option value="1">第1梯</option><option value="2">第2梯</option>
-            <option value="3">第3梯</option><option value="4">第4梯</option>
-            <option value="5">第5梯</option><option value="6">第6梯</option>
+            <option value="1">內聘</option>
+            <option value="2">外聘</option>
           </select>
         </div>
         <div class="col-6">
@@ -537,18 +532,10 @@
   window.userRole = 'admin';
 
   function getBatchBadge(batch) {
-    const b = parseInt(batch) || 1; 
-    let colorClass = "bg-secondary"; 
-    switch (b) {
-      case 1: colorClass = "bg-primary"; break;
-      case 2: colorClass = "bg-success"; break;
-      case 3: colorClass = "bg-info text-dark"; break;
-      case 4: colorClass = "bg-warning text-dark"; break;
-      case 5: colorClass = "bg-danger"; break;
-      case 6: colorClass = "bg-dark"; break;
-      default: colorClass = "bg-secondary"; break;
-    }
-    return `<span class="badge ${colorClass} rounded-pill">第${b}梯</span>`;
+    const b = parseInt(batch) || 1;
+    if (b === 1) return `<span class="badge bg-primary rounded-pill">內聘</span>`;
+    if (b === 2) return `<span class="badge bg-warning text-dark rounded-pill">外聘</span>`;
+    return `<span class="badge bg-secondary rounded-pill">第${b}梯</span>`;
   }
 
   let dataTable;
@@ -1184,6 +1171,32 @@ function exportSmsExcel() {
         h += '</ul>'; previewEl.innerHTML = h;
         reloadData();
       });
+  }
+
+  // 行前通知 — 簡訊批次檔 (EVERY8D 格式，只含已同意委員)
+  function exportPreNoticeSmsExcel() {
+    const selected = getSelected();
+    if (selected.length === 0) return alert("請先勾選要匯出的委員！");
+    const btn = document.querySelector('button[onclick="exportPreNoticeSmsExcel()"]');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 產生中...';
+    btn.disabled = true;
+
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'adminExportPreNoticeSmsData', data: { ids: selected } })
+    })
+    .then(r => r.json())
+    .then(result => {
+      btn.innerHTML = orig; btn.disabled = false;
+      const d = result.data || result;
+      if (result.status !== 'success' || !d.excelData) return alert("匯出失敗：" + (result.message || "未知錯誤"));
+      const ws = XLSX.utils.aoa_to_sheet(d.excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "行前通知");
+      XLSX.writeFile(wb, `行前通知簡訊_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`);
+    })
+    .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert("發生錯誤，請稍後再試。"); });
   }
 
  function exportCSV() {
