@@ -702,7 +702,7 @@ function reloadData() {
 
         // ── 欄位索引對應（對應新版 Dashboard 欄位） ──
         const idx = {};
-        d.headers.forEach((h, i) => { idx[h] = i; });
+        d.headers.forEach((h, i) => { idx[h.trim()] = i; });
         const C = {
           name:     idx['科別'],
           venue:    idx['考場'],

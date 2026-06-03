@@ -951,12 +951,11 @@ function getDashboardData() {
   }
 
   const allValues = sheet.getRange(1, 1, lastRow, lastCol).getValues();
-  const headers = allValues[0].map(h => String(h));
+  const headers = allValues[0].map(h => String(h).trim());   // trim 避免空白造成對應失敗
   const rows = [];
 
   for (let i = 1; i < allValues.length; i++) {
     const row = allValues[i];
-    // 略過完全空白的列
     if (row.every(cell => cell === '' || cell === null || cell === undefined)) continue;
     rows.push(row.map(cell => (cell === null || cell === undefined) ? '' : String(cell)));
   }
