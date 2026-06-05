@@ -119,6 +119,8 @@
           fetch(`${API_URL}?action=resolveShortCode&s=${shortCode}`)
             .then(response => response.json())
             .then(result => {
+              console.log('[resolveShortCode] 短代碼:', shortCode);
+              console.log('[resolveShortCode] API 回傳:', JSON.stringify(result));
               const resData = result.data ? result.data : result;
               if (result.status === 'success') {
                 if (resData.type === 'redirect' && resData.url) {
@@ -130,12 +132,12 @@
                 } else {
                   document.getElementById('loading').style.display = 'none';
                   document.getElementById('error-msg').classList.remove('hidden');
-                  alert("此連結已失效或錯誤。");
+                  alert("此連結已失效或錯誤。\n[resData=" + JSON.stringify(resData) + "]");
                 }
               } else {
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('error-msg').classList.remove('hidden');
-                alert("此連結已失效或錯誤。");
+                alert("此連結已失效或錯誤。\n原因：" + (result.message || JSON.stringify(result)));
               }
             })
             .catch(err => {
