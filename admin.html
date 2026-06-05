@@ -443,10 +443,10 @@
           </div>
           <div class="tab-pane fade" id="tpl-prenotice-pane">
             <h6 class="fw-bold mt-2"><i class="fa-solid fa-envelope me-1 text-info"></i>行前通知信（HTML）</h6>
-            <div class="alert alert-info py-2 small">僅寄給已同意的委員。變數：<code>{{name}}</code>（姓名）、<code>{{title}}</code>（職稱）、<code>{{subject}}</code>（科別）、<code>{{unit}}</code>（單位）、<code>{{diet}}</code>（飲食葷素）、<code>{{venue}}</code>（考場：西苑高中 或 嶺東中學）</div>
+            <div class="alert alert-info py-2 small">僅寄給已同意的委員。變數：<code>{{name}}</code>（姓名）、<code>{{title}}</code>（職稱）、<code>{{subject}}</code>（科別）、<code>{{unit}}</code>（單位）、<code>{{diet}}</code>（飲食葷素）、<code>{{venue}}</code>（考場）、<code>{{雲端連結}}</code>（依內/外聘自動帶入對應的雲端連結，請先在 Dashboard 分頁新增「內聘雲端連結」與「外聘雲端連結」欄位）</div>
             <textarea class="form-control mb-4" id="tpl_prenotice_email" name="tpl_prenotice_email"></textarea>
             <h6 class="fw-bold"><i class="fa-solid fa-comment-sms me-1 text-info"></i>行前通知簡訊（純文字）</h6>
-            <div class="form-text mb-1">變數：<code>{{姓名}}</code>、<code>{{職稱}}</code>、<code>{{科別}}</code>、<code>{{單位}}</code>、<code>{{飲食}}</code>、<code>{{考場}}</code></div>
+            <div class="form-text mb-1">變數：<code>{{姓名}}</code>、<code>{{職稱}}</code>、<code>{{科別}}</code>、<code>{{單位}}</code>、<code>{{飲食}}</code>、<code>{{考場}}</code>、<code>{{雲端連結}}</code>（依內/外聘自動帶入）</div>
             <textarea class="form-control" id="tpl_prenotice_sms" name="tpl_prenotice_sms" rows="5"></textarea>
           </div>
       </div></form>

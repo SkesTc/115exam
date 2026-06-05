@@ -148,30 +148,32 @@ function adminExportSmsData(ids) {
   return { status: 'success', excelData: exportData };
 }
 // ── 行前通知簡訊批次檔 (EVERY8D 格式，只含已同意委員) ──
+//    參數配置：p1=姓名, p2=考場, p3=科別, p4=雲端連結(依內/外聘自動選), p5=飲食
 function adminExportPreNoticeSmsData(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   const venueMap = buildVenueMap();   // 只讀一次 Dashboard
 
-  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(飲食)", "參數五(職稱)"];
+  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(雲端連結)", "參數五(飲食)"];
   let exportData = [headers];
 
   for (let i = 1; i < data.length; i++) {
     const uid         = data[i][0];
     const name        = data[i][1] || '';
     const subject     = data[i][2] || '';
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
     const phoneRaw    = data[i][11];
     const willingness = data[i][6];
     const diet        = data[i][7] || '';
-    const title       = data[i][13] || '';
 
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
 
-    const phone = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
-    const venue = getVenueBySubject(subject, venueMap);
+    const phone     = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
+    const venue     = getVenueBySubject(subject, venueMap);
+    const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
 
-    exportData.push([name, phone, '', '', name, venue, subject, diet, title]);
+    exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
   }
 
   return { status: 'success', excelData: exportData };
@@ -586,35 +588,55 @@ const payload = {
   return { status: 'success', count: successCount, logs: logs };
 }
 
-// ── 從 Dashboard 分頁建立「科別 → 考場」對應表 ──
+// ── 從 Dashboard 分頁建立「科別 → { venue, linkNei, linkWai }」對應表 ──
+//    欄位說明：考場、內聘雲端連結、外聘雲端連結
 function buildVenueMap() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dashboard');
   if (!sheet) return {};
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return {};
-  const headers = data[0].map(h => String(h).trim());
+  const headers    = data[0].map(h => String(h).trim());
   const subjectIdx = headers.indexOf('科別');
   const venueIdx   = headers.indexOf('考場');
+  const linkNeiIdx = headers.indexOf('內聘雲端連結');  // 可不存在
+  const linkWaiIdx = headers.indexOf('外聘雲端連結');  // 可不存在
   if (subjectIdx === -1 || venueIdx === -1) return {};
   const map = {};
   for (let i = 1; i < data.length; i++) {
     const s = String(data[i][subjectIdx]).trim();
-    const v = String(data[i][venueIdx]).trim();
-    if (s && v) map[s] = v;
+    if (!s) continue;
+    map[s] = {
+      venue:   String(data[i][venueIdx]).trim(),
+      linkNei: linkNeiIdx !== -1 ? String(data[i][linkNeiIdx]).trim() : '',
+      linkWai: linkWaiIdx !== -1 ? String(data[i][linkWaiIdx]).trim() : ''
+    };
   }
   return map;
 }
 
-// ── 科別 → 考場查詢（傳入預先建好的 map 避免重複讀表） ──
-function getVenueBySubject(subject, venueMap) {
-  if (!venueMap) venueMap = buildVenueMap();
-  // 完全比對
+// ── 內部共用：依科別找到對應的 entry（完全比對 → 部分比對） ──
+function _lookupVenueEntry(subject, venueMap) {
   if (venueMap[subject]) return venueMap[subject];
-  // 部分比對（科別含【口試】/【試教】後綴時）
   for (const key of Object.keys(venueMap)) {
     if (subject.includes(key) || key.includes(subject)) return venueMap[key];
   }
-  return '（請確認考場）';
+  return null;
+}
+
+// ── 科別 → 考場名稱 ──
+function getVenueBySubject(subject, venueMap) {
+  if (!venueMap) venueMap = buildVenueMap();
+  const entry = _lookupVenueEntry(subject, venueMap);
+  return entry ? (entry.venue || '（請確認考場）') : '（請確認考場）';
+}
+
+// ── 科別 + 梯次(batch) → 雲端連結 ──
+//    batch=1 → 內聘連結；batch=2 → 外聘連結
+function getCloudLinkBySubject(subject, batch, venueMap) {
+  if (!venueMap) venueMap = buildVenueMap();
+  const entry = _lookupVenueEntry(subject, venueMap);
+  if (!entry) return '';
+  return String(batch) === '2' ? (entry.linkWai || '') : (entry.linkNei || '');
 }
 
 // ── 自動將文字中所有 http(s) 網址轉成短網址 ──
@@ -677,6 +699,7 @@ function adminSendPreNotice(ids) {
     const name        = data[i][1];
     const subject     = data[i][2];
     const email       = data[i][3];
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
     const willingness = data[i][6];
     const diet        = data[i][7] || '';
     const unit        = data[i][12] || '';
@@ -687,14 +710,16 @@ function adminSendPreNotice(ids) {
     if (!email) continue;
 
     try {
-      const venue = getVenueBySubject(subject, venueMap);
+      const venue     = getVenueBySubject(subject, venueMap);
+      const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
       let body = templateStr
         .replace(/{{name}}/g, name)
         .replace(/{{title}}/g, title)
         .replace(/{{subject}}/g, subject)
         .replace(/{{unit}}/g, unit)
         .replace(/{{diet}}/g, diet)
-        .replace(/{{venue}}/g, venue);
+        .replace(/{{venue}}/g, venue)
+        .replace(/{{雲端連結}}/g, cloudLink);
       body = shortenUrlsInText(body);   // 自動縮短信件中的網址
       GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
       count++;
@@ -719,6 +744,7 @@ function adminSendPreNoticeSMS(ids, template) {
     const uid         = data[i][0];
     const name        = data[i][1];
     const subject     = data[i][2];
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
     const phone       = data[i][11];
     const willingness = data[i][6];
     const diet        = data[i][7] || '';
@@ -729,14 +755,16 @@ function adminSendPreNoticeSMS(ids, template) {
     if (willingness !== 'yes') continue;
     if (!phone) continue;
 
-    const venue = getVenueBySubject(subject, venueMap);
+    const venue     = getVenueBySubject(subject, venueMap);
+    const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
     const msg = shortenUrlsInText(template  // 自動縮短簡訊中的網址
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
       .replace(/{{科別}}/g, subject)
       .replace(/{{單位}}/g, unit)
       .replace(/{{飲食}}/g, diet)
-      .replace(/{{考場}}/g, venue));
+      .replace(/{{考場}}/g, venue)
+      .replace(/{{雲端連結}}/g, cloudLink));
 
     const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
     try {
