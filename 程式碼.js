@@ -169,9 +169,13 @@ function adminExportPreNoticeSmsData(ids) {
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
 
-    const phone     = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
-    const venue     = getVenueBySubject(subject, venueMap);
-    const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
+    const phone          = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
+    const venue          = getVenueBySubject(subject, venueMap);
+    const cloudLinkRaw   = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
+    // 批次檔雲端連結轉短網址（去除 https:// 前綴，符合簡訊格式）
+    const cloudLink = cloudLinkRaw
+      ? createShortUrl(cloudLinkRaw).replace(/^https?:\/\//i, '')
+      : '';
 
     exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
   }
