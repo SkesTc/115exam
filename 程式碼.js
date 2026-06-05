@@ -720,7 +720,6 @@ function adminSendPreNotice(ids) {
         .replace(/{{diet}}/g, diet)
         .replace(/{{venue}}/g, venue)
         .replace(/{{雲端連結}}/g, cloudLink);
-      body = shortenUrlsInText(body);   // 自動縮短信件中的網址
       GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
       count++;
     } catch(e) { console.error('PreNotice email error:', e); }
