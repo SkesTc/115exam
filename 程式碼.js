@@ -1058,6 +1058,7 @@ function exportCheckInBook(ids) {
     const batch      = String(data[i][4] || '1');
     const willingness= data[i][6];
     const diet       = data[i][7] || '';
+    const phone      = data[i][11] || '';
     const unit       = data[i][12] || '';
     const title      = data[i][13] || '';
 
@@ -1069,7 +1070,7 @@ function exportCheckInBook(ids) {
     candidates.push({
       name, subject, venue,
       batch:  batch === '2' ? '外聘' : '內聘',
-      unit, title, diet
+      unit, title, phone, diet
     });
   }
 

@@ -1221,9 +1221,9 @@ function exportSmsExcel() {
     .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert("發生錯誤，請稍後再試。"); });
   }
 
-  // ── 報到紀錄冊 ──
+  // ── 報到紀錄冊（直式 PDF 列印） ──
   function exportCheckInBook() {
-    const ids = getSelected();   // 有勾選則只匯出勾選者；否則匯出全部已同意
+    const ids = getSelected();
     const btn = document.querySelector('button[onclick="exportCheckInBook()"]');
     const orig = btn.innerHTML;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 產生中…';
@@ -1241,49 +1241,95 @@ function exportSmsExcel() {
         return alert('無已同意的委員資料可匯出。');
       }
 
-      const wb = XLSX.utils.book_new();
-      const dateStr = '115年6月14日（星期日）';
-
-      d.groups.forEach(group => {
-        // ── 組建二維陣列 ──
-        const aoa = [];
-        // 第0列：大標題（跨欄合併）
-        aoa.push([`考場：${group.venue}　　科別：${group.subject}　　甄試日期：${dateStr}`]);
-        // 第1列：欄位標題
-        aoa.push(['序號', '姓名', '服務單位', '職稱', '梯次', '飲食', '到場時間', '簽名', '備註']);
-        // 第2列起：資料
-        group.list.forEach(c => {
-          aoa.push([c.seq, c.name, c.unit, c.title, c.batch, c.diet, '', '', '']);
-        });
-        // 空白簽到格（預留 3 行讓現場手寫補錄）
-        for (let i = 0; i < 3; i++) aoa.push(['', '', '', '', '', '', '', '', '']);
-
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-        // 欄寬
-        ws['!cols'] = [
-          { wch: 5 },   // 序號
-          { wch: 9 },   // 姓名
-          { wch: 22 },  // 服務單位
-          { wch: 8 },   // 職稱
-          { wch: 6 },   // 梯次
-          { wch: 5 },   // 飲食
-          { wch: 10 },  // 到場時間
-          { wch: 10 },  // 簽名
-          { wch: 14 }   // 備註
-        ];
-
-        // 第一列合併至最後一欄
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
-
-        // sheet 名稱最長 31 字（Excel 限制），取考場縮寫+科別
-        const venueSuffix = group.venue.replace(/高中|國中|國小/g, '');
-        const sheetName = (venueSuffix + '-' + group.subject).substring(0, 31);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      // ── 產生列印用 HTML ──
+      let tablesHtml = '';
+      d.groups.forEach((group, gi) => {
+        const isLast = gi === d.groups.length - 1;
+        const rows = group.list.map(c => `
+          <tr>
+            <td>${c.seq}</td>
+            <td>${c.name}</td>
+            <td class="left">${c.phone || ''}</td>
+            <td class="left">${c.unit}</td>
+            <td>${c.title}</td>
+            <td>${c.batch}</td>
+            <td>${c.diet}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>`).join('');
+        // 預留 3 行空白讓現場補錄
+        const blanks = '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(3);
+        tablesHtml += `
+        <div class="group${isLast ? '' : ' break-after'}">
+          <h2>考場：${group.venue}　　科別：${group.subject}　　115年6月14日（星期日）</h2>
+          <table>
+            <thead>
+              <tr>
+                <th class="col-seq">序號</th>
+                <th class="col-name">姓名</th>
+                <th class="col-phone">聯絡電話</th>
+                <th class="col-unit">服務單位</th>
+                <th class="col-title">職稱</th>
+                <th class="col-batch">梯次</th>
+                <th class="col-diet">飲食</th>
+                <th class="col-arrive">到場時間</th>
+                <th class="col-sign">簽名</th>
+                <th class="col-note">備註</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              ${blanks}
+            </tbody>
+          </table>
+        </div>`;
       });
 
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      XLSX.writeFile(wb, `報到紀錄冊_${today}.xlsx`);
+      const html = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>報到紀錄冊</title>
+<style>
+  @page { size: A4 portrait; margin: 1.2cm 1.5cm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Noto Sans TC', '微軟正黑體', '新細明體', Arial, sans-serif;
+         font-size: 9.5pt; color: #000; margin: 0; }
+  h2 { font-size: 11pt; text-align: center; margin: 0 0 6px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #333; padding: 3px 4px;
+           text-align: center; vertical-align: middle; word-break: break-all; }
+  th { background: #e0e0e0; font-weight: bold; font-size: 9pt; }
+  td { height: 22px; font-size: 9pt; }
+  .left { text-align: left; }
+  .col-seq   { width:  5%; }
+  .col-name  { width:  8%; }
+  .col-phone { width: 13%; }
+  .col-unit  { width: 21%; }
+  .col-title { width:  7%; }
+  .col-batch { width:  6%; }
+  .col-diet  { width:  5%; }
+  .col-arrive{ width: 10%; }
+  .col-sign  { width: 12%; }
+  .col-note  { width: 13%; }
+  .group { margin-bottom: 0; }
+  .break-after { page-break-after: always; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+${tablesHtml}
+<script>window.onload = function(){ window.print(); }<\/script>
+</body>
+</html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) { alert('請允許本頁開啟彈出視窗後再試一次。'); return; }
+      win.document.write(html);
+      win.document.close();
     })
     .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert('發生錯誤，請稍後再試。'); });
   }
