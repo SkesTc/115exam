@@ -723,6 +723,9 @@ function reloadData() {
           '已同意':'fa-circle-check', '尚缺人數':'fa-triangle-exclamation',
           '已婉拒':'fa-circle-xmark'
         };
+        // 看板中不顯示的欄位
+        const HIDE_COLS = new Set(['內聘雲端連結', '外聘雲端連結']);
+
         // 狀態與徵詢進度插在科別（及考場）之後
         const insertAfter = idx['考場'] !== undefined ? idx['考場'] : (idx['科別'] ?? 0);
         const extraHeaders = ['狀態', '徵詢進度'];
@@ -730,7 +733,7 @@ function reloadData() {
           ...d.headers.slice(0, insertAfter + 1),
           ...extraHeaders,
           ...d.headers.slice(insertAfter + 1)
-        ];
+        ].filter(h => !HIDE_COLS.has(h));
         theadRow.innerHTML = displayHeaders.map(h => {
           const icon = ICON_MAP[h] || 'fa-circle';
           return `<th><i class="fa-solid ${icon} me-1 opacity-75"></i>${h}</th>`;
@@ -769,9 +772,10 @@ function reloadData() {
                  <div class="db-prog-wrap"><div class="db-prog-bar" style="width:${pct}%;background:${barColor};"></div></div>
                </td>`;
 
-          // 依原始欄位順序逐格渲染
+          // 依原始欄位順序逐格渲染（隱藏欄位傳回 null）
           const cells = row.map((cell, i) => {
             const h = d.headers[i];
+            if (HIDE_COLS.has(h)) return null;
             if (h === '尚缺人數') {
               const cls = si(cell) > 0 ? 'db-cell-red' : 'db-cell-green';
               return `<td class="db-num ${cls}">${cell}</td>`;
@@ -785,7 +789,7 @@ function reloadData() {
             if (h === '考場')   return `<td class="fw-semibold" style="white-space:nowrap">${cell}</td>`;
             // 其他數字欄
             return `<td class="db-num">${cell || ''}</td>`;
-          });
+          }).filter(c => c !== null);
 
           // 把狀態與進度兩欄插進去（insertAfter 之後）
           cells.splice(insertAfter + 1, 0,
