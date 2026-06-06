@@ -273,6 +273,7 @@
         <div class="vr admin-only"></div>
         <button class="btn btn-info text-white admin-only" onclick="sendPreNoticeEmail()"><i class="fa-solid fa-bell me-1"></i>行前通知(信)</button>
         <button class="btn btn-outline-info admin-only" onclick="exportPreNoticeSmsExcel()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊批次檔)</button>
+        <button class="btn btn-secondary admin-only" onclick="exportCheckInBook()"><i class="fa-solid fa-clipboard-list me-1"></i>報到紀錄冊</button>
         <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
       </div>
     </div>
@@ -1220,7 +1221,74 @@ function exportSmsExcel() {
     .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert("發生錯誤，請稍後再試。"); });
   }
 
- function exportCSV() {
+  // ── 報到紀錄冊 ──
+  function exportCheckInBook() {
+    const ids = getSelected();   // 有勾選則只匯出勾選者；否則匯出全部已同意
+    const btn = document.querySelector('button[onclick="exportCheckInBook()"]');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 產生中…';
+    btn.disabled = true;
+
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'exportCheckInBook', data: { ids } })
+    })
+    .then(res => res.json())
+    .then(result => {
+      btn.innerHTML = orig; btn.disabled = false;
+      const d = result.data || result;
+      if (result.status !== 'success' || !d.groups || d.groups.length === 0) {
+        return alert('無已同意的委員資料可匯出。');
+      }
+
+      const wb = XLSX.utils.book_new();
+      const dateStr = '115年6月14日（星期日）';
+
+      d.groups.forEach(group => {
+        // ── 組建二維陣列 ──
+        const aoa = [];
+        // 第0列：大標題（跨欄合併）
+        aoa.push([`考場：${group.venue}　　科別：${group.subject}　　甄試日期：${dateStr}`]);
+        // 第1列：欄位標題
+        aoa.push(['序號', '姓名', '服務單位', '職稱', '梯次', '飲食', '到場時間', '簽名', '備註']);
+        // 第2列起：資料
+        group.list.forEach(c => {
+          aoa.push([c.seq, c.name, c.unit, c.title, c.batch, c.diet, '', '', '']);
+        });
+        // 空白簽到格（預留 3 行讓現場手寫補錄）
+        for (let i = 0; i < 3; i++) aoa.push(['', '', '', '', '', '', '', '', '']);
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // 欄寬
+        ws['!cols'] = [
+          { wch: 5 },   // 序號
+          { wch: 9 },   // 姓名
+          { wch: 22 },  // 服務單位
+          { wch: 8 },   // 職稱
+          { wch: 6 },   // 梯次
+          { wch: 5 },   // 飲食
+          { wch: 10 },  // 到場時間
+          { wch: 10 },  // 簽名
+          { wch: 14 }   // 備註
+        ];
+
+        // 第一列合併至最後一欄
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+
+        // sheet 名稱最長 31 字（Excel 限制），取考場縮寫+科別
+        const venueSuffix = group.venue.replace(/高中|國中|國小/g, '');
+        const sheetName = (venueSuffix + '-' + group.subject).substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      XLSX.writeFile(wb, `報到紀錄冊_${today}.xlsx`);
+    })
+    .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert('發生錯誤，請稍後再試。'); });
+  }
+
+  function exportCSV() {
     if(!globalData||!globalData.list||globalData.list.length===0)return alert("無資料");
 
     const isViewer = (window.userRole === 'viewer');

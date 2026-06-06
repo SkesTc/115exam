@@ -85,6 +85,7 @@ function doPost(e) {
     else if (action === 'verifyLogin') { responseData = verifyLogin(payload.username, payload.password); }
     else if (action === 'adminExportSmsData') { responseData = adminExportSmsData(payload.ids); }
     else if (action === 'adminExportPreNoticeSmsData') { responseData = adminExportPreNoticeSmsData(payload.ids); }
+    else if (action === 'exportCheckInBook') { responseData = exportCheckInBook(payload.ids); }
     else {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 POST 請求' })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -1039,6 +1040,63 @@ function getDashboardData() {
   }
 
   return { headers, rows };
+}
+
+// ==========================================
+// 10. 報到紀錄冊匯出
+// ==========================================
+function exportCheckInBook(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const venueMap = buildVenueMap();
+
+  const candidates = [];
+  for (let i = 1; i < data.length; i++) {
+    const uid        = data[i][0];
+    const name       = data[i][1] || '';
+    const subject    = data[i][2] || '';
+    const batch      = String(data[i][4] || '1');
+    const willingness= data[i][6];
+    const diet       = data[i][7] || '';
+    const unit       = data[i][12] || '';
+    const title      = data[i][13] || '';
+
+    // ids 有值時只取勾選者；沒有勾選則取全部
+    if (ids && ids.length > 0 && !ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+
+    const venue = getVenueBySubject(subject, venueMap);
+    candidates.push({
+      name, subject, venue,
+      batch:  batch === '2' ? '外聘' : '內聘',
+      unit, title, diet
+    });
+  }
+
+  // 依「考場 → 科別」分組
+  const groupMap = {};
+  for (const c of candidates) {
+    const key = c.venue + '||' + c.subject;
+    if (!groupMap[key]) groupMap[key] = { venue: c.venue, subject: c.subject, list: [] };
+    groupMap[key].list.push(c);
+  }
+
+  // 排序：考場 → 科別 → 梯次（內聘優先）→ 姓名
+  const groups = Object.values(groupMap).sort((a, b) => {
+    if (a.venue !== b.venue) return a.venue.localeCompare(b.venue, 'zh');
+    return a.subject.localeCompare(b.subject, 'zh');
+  });
+
+  for (const g of groups) {
+    g.list.sort((a, b) => {
+      if (a.batch !== b.batch) return a.batch === '內聘' ? -1 : 1;
+      return a.name.localeCompare(b.name, 'zh');
+    });
+    // 補序號
+    g.list = g.list.map((c, idx) => ({ seq: idx + 1, ...c }));
+  }
+
+  return { status: 'success', groups };
 }
 
 // ==========================================
