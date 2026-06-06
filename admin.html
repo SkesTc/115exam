@@ -1256,9 +1256,10 @@ function exportSmsExcel() {
             <td>${c.diet}</td>
             <td></td>
             <td></td>
+            <td></td>
           </tr>`).join('');
         // 預留 3 行空白讓現場補錄
-        const blanks = '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(3);
+        const blanks = '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(3);
         tablesHtml += `
         <div class="group${isLast ? '' : ' break-after'}">
           <h2>考場：${group.venue}　　科別：${group.subject}　　115年6月14日（星期日）</h2>
@@ -1273,6 +1274,7 @@ function exportSmsExcel() {
                 <th class="col-batch">梯次</th>
                 <th class="col-diet">飲食</th>
                 <th class="col-sign">簽名</th>
+                <th class="col-room">試場編號</th>
                 <th class="col-note">備註</th>
               </tr>
             </thead>
@@ -1308,8 +1310,9 @@ function exportSmsExcel() {
   .col-title { width:  7%; }
   .col-batch { width:  6%; }
   .col-diet  { width:  5%; }
-  .col-sign  { width: 22%; }
-  .col-note  { width: 13%; }
+  .col-sign  { width: 15%; }
+  .col-room  { width:  9%; }
+  .col-note  { width: 11%; }
   .group { margin-bottom: 0; }
   .break-after { page-break-after: always; }
   @media print {
