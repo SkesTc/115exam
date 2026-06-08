@@ -91,6 +91,7 @@ function doPost(e) {
     else if (action === 'adminExportPreNoticeSmsData') { responseData = adminExportPreNoticeSmsData(payload.ids); }
     else if (action === 'exportCheckInBook') { responseData = exportCheckInBook(payload.ids); }
     else if (action === 'getClicksByShortCodes') { responseData = getClicksByShortCodes(payload.codes); }
+    else if (action === 'fillPreNoticeUids')    { responseData = fillPreNoticeUids(payload.rows); }
     else {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 POST 請求' })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -1247,6 +1248,76 @@ function getClicksByShortCodes(codes) {
   }
 
   return { status: 'success', clicks: result };
+}
+
+// ==========================================
+// 12-b2. 依 Excel 批次檔填入 UrlShortener 的 uid 標記
+// ==========================================
+function fillPreNoticeUids(rows) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet  = ss.getSheetByName('UrlShortener');
+  const candSheet = ss.getSheetByName(SHEET_NAME);
+  if (!urlSheet || !candSheet) throw new Error('找不到分頁');
+
+  const urlData  = urlSheet.getDataRange().getValues();
+  const candData = candSheet.getDataRange().getValues();
+
+  // 建立 name → [{uid, subject}] 對照表
+  const nameMap = {};
+  for (let i = 1; i < candData.length; i++) {
+    const uid     = String(candData[i][0] || '').trim();
+    const name    = String(candData[i][1] || '').trim();
+    const subject = String(candData[i][2] || '').trim();
+    if (!uid || !name) continue;
+    if (!nameMap[name]) nameMap[name] = [];
+    nameMap[name].push({ uid, subject });
+  }
+
+  // 建立 shortCode → sheet row (1-indexed) 對照表
+  const codeToRow = {};
+  for (let i = 1; i < urlData.length; i++) {
+    const code = String(urlData[i][0] || '').trim();
+    if (code) codeToRow[code] = i + 1;
+  }
+
+  let updated = 0, skipped = 0;
+  const errors = [];
+
+  for (const row of rows) {
+    const shortCode = String(row.shortCode || '').trim();
+    const name      = String(row.name      || '').trim();
+    const subject   = String(row.subject   || '').trim();
+
+    const candList = nameMap[name];
+    if (!candList || candList.length === 0) {
+      errors.push('找不到委員: ' + name); continue;
+    }
+
+    let uid = null;
+    if (candList.length === 1) {
+      uid = candList[0].uid;
+    } else {
+      // 重複姓名：用科別模糊比對
+      const hit = candList.find(c =>
+        subject.includes(c.subject) || c.subject.includes(subject)
+      );
+      if (hit) { uid = hit.uid; }
+      else { errors.push('重複姓名無法區分: ' + name + ' (' + subject + ')'); continue; }
+    }
+
+    const sheetRow = codeToRow[shortCode];
+    if (!sheetRow) {
+      errors.push('UrlShortener 無此短代碼: ' + shortCode + ' (' + name + ')'); continue;
+    }
+
+    const currentE = String(urlData[sheetRow - 1][4] || '').trim();
+    if (currentE) { skipped++; continue; }   // 已有值，跳過
+
+    urlSheet.getRange(sheetRow, 5).setValue(uid);
+    updated++;
+  }
+
+  return { status: 'success', updated, skipped, errors };
 }
 
 // ==========================================

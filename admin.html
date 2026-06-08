@@ -595,6 +595,9 @@
                     <button id="exportUnclickedBtn" class="btn btn-warning btn-sm ms-1" style="display:none;" onclick="exportUnclickedBatch()">
                       <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊批次檔
                     </button>
+                    <button id="fillUidBtn" class="btn btn-info btn-sm ms-1 text-white" style="display:none;" onclick="fillPreNoticeUids()">
+                      <i class="fa-solid fa-id-card me-1"></i>填入 UUID
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1437,6 +1440,7 @@ function exportSmsExcel() {
     document.getElementById('batchStatsTableWrap').style.display = 'none';
     document.getElementById('batchStatsLoading').classList.remove('d-none');
     document.getElementById('exportUnclickedBtn').style.display = 'none';
+    document.getElementById('fillUidBtn').style.display = 'none';
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -1495,6 +1499,7 @@ function exportSmsExcel() {
           const exportBtn = document.getElementById('exportUnclickedBtn');
           exportBtn.textContent = `匯出未點擊批次檔（${unclickedCount} 人）`;
           exportBtn.style.display = unclickedCount > 0 ? '' : 'none';
+          document.getElementById('fillUidBtn').style.display = '';
           filterBatchStats();
           document.getElementById('batchStatsTableWrap').style.display = '';
         })
@@ -1509,6 +1514,37 @@ function exportSmsExcel() {
       }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function fillPreNoticeUids() {
+    if (_batchAll.length === 0) return alert('請先上傳批次檔');
+    const rows = _batchAll.map(r => ({
+      shortCode: r.code,
+      name:      r.name,
+      subject:   r.subject
+    }));
+    const btn = document.getElementById('fillUidBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>處理中…';
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'fillPreNoticeUids', data: { rows } })
+    })
+    .then(r => r.json())
+    .then(result => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-id-card me-1"></i>填入 UUID';
+      const d = result.data || result;
+      if (result.status !== 'success') return alert('失敗：' + (result.message || ''));
+      let msg = `完成！\n✅ 已填入：${d.updated} 筆\n⏭ 已跳過（已有值）：${d.skipped} 筆`;
+      if (d.errors && d.errors.length) msg += '\n\n⚠️ 錯誤：\n' + d.errors.join('\n');
+      alert(msg);
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-id-card me-1"></i>填入 UUID';
+      alert('連線錯誤：' + err);
+    });
   }
 
   function exportUnclickedBatch() {
