@@ -561,7 +561,10 @@
                   </select>
                   <span id="clickStatsCount" class="text-muted small"></span>
                   <button id="exportInviteUnclickedBtn" class="btn btn-warning btn-sm ms-1" style="display:none;" onclick="exportInviteUnclickedSms()">
-                    <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊簡訊批次檔
+                    <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊邀請簡訊
+                  </button>
+                  <button id="exportPreNoticeUnclickedBtn" class="btn btn-outline-warning btn-sm ms-1" style="display:none;" onclick="exportPreNoticeUnclickedSms()">
+                    <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊行前通知簡訊
                   </button>
                 </div>
                 <div class="table-responsive">
@@ -1407,12 +1410,20 @@ function exportSmsExcel() {
     });
     renderClickStats(filtered);
 
-    // 顯示/隱藏 匯出未點擊按鈕，並顯示人數
-    const exportBtn = document.getElementById('exportInviteUnclickedBtn');
-    if (exportBtn && _clickStatsAll.length > 0) {
-      const unclickedCount = _clickStatsAll.filter(r => r.inviteClicks === 0).length;
-      exportBtn.style.display = unclickedCount > 0 ? '' : 'none';
-      exportBtn.innerHTML = `<i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊簡訊批次檔（${unclickedCount} 人）`;
+    // 顯示/隱藏 兩個匯出按鈕並更新人數
+    if (_clickStatsAll.length > 0) {
+      const inviteUnclicked = _clickStatsAll.filter(r => r.inviteClicks === 0).length;
+      const pnUnclicked     = _clickStatsAll.filter(r => r.preNoticeClicks === 0 && r.willingness === 'yes').length;
+      const invBtn = document.getElementById('exportInviteUnclickedBtn');
+      if (invBtn) {
+        invBtn.style.display = inviteUnclicked > 0 ? '' : 'none';
+        invBtn.innerHTML = `<i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊邀請簡訊（${inviteUnclicked} 人）`;
+      }
+      const pnBtn = document.getElementById('exportPreNoticeUnclickedBtn');
+      if (pnBtn) {
+        pnBtn.style.display = pnUnclicked > 0 ? '' : 'none';
+        pnBtn.innerHTML = `<i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊行前通知簡訊（${pnUnclicked} 人）`;
+      }
     }
   }
 
@@ -1458,19 +1469,28 @@ function exportSmsExcel() {
 
   // ── 匯出邀請簡訊「未點擊」批次檔 ──
   function exportInviteUnclickedSms() {
-    const unclickedUids = _clickStatsAll
-      .filter(r => r.inviteClicks === 0)
-      .map(r => r.uid);
-    if (unclickedUids.length === 0) return alert('沒有未點擊的委員');
+    const uids = _clickStatsAll.filter(r => r.inviteClicks === 0).map(r => r.uid);
+    if (uids.length === 0) return alert('沒有未點擊的委員');
+    _doExportSms('adminExportSmsData', uids, 'exportInviteUnclickedBtn', '邀請簡訊未點擊', `邀請簡訊未點擊_${_today()}.xlsx`);
+  }
 
-    const btn = document.getElementById('exportInviteUnclickedBtn');
+  // ── 匯出行前通知簡訊「未點擊」批次檔 ──
+  function exportPreNoticeUnclickedSms() {
+    const uids = _clickStatsAll.filter(r => r.preNoticeClicks === 0 && r.willingness === 'yes').map(r => r.uid);
+    if (uids.length === 0) return alert('沒有未點擊行前通知簡訊的委員');
+    _doExportSms('adminExportPreNoticeSmsData', uids, 'exportPreNoticeUnclickedBtn', '行前通知未點擊', `行前通知簡訊未點擊_${_today()}.xlsx`);
+  }
+
+  function _today() { return new Date().toISOString().slice(0, 10).replace(/-/g, ''); }
+
+  function _doExportSms(action, uids, btnId, sheetName, fileName) {
+    const btn = document.getElementById(btnId);
     const orig = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>產生中…';
-
     fetch(API_URL, {
       method: 'POST',
-      body: JSON.stringify({ action: 'adminExportSmsData', data: unclickedUids })
+      body: JSON.stringify({ action, data: uids })
     })
     .then(r => r.json())
     .then(result => {
@@ -1478,12 +1498,10 @@ function exportSmsExcel() {
       btn.innerHTML = orig;
       const d = result.data || result;
       if (result.status !== 'success' || !d.excelData) return alert('匯出失敗：' + (result.message || ''));
-      const rows = d.excelData;
-      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const ws = XLSX.utils.aoa_to_sheet(d.excelData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '邀請簡訊未點擊');
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      XLSX.writeFile(wb, `邀請簡訊未點擊_${dateStr}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, fileName);
     })
     .catch(err => {
       btn.disabled = false;
