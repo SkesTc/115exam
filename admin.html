@@ -592,6 +592,9 @@
                       <option value="none">未點擊</option>
                     </select>
                     <span id="batchStatsCount" class="text-muted small"></span>
+                    <button id="exportUnclickedBtn" class="btn btn-warning btn-sm ms-1" style="display:none;" onclick="exportUnclickedBatch()">
+                      <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊批次檔
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1422,7 +1425,8 @@ function exportSmsExcel() {
   }
 
   // ── 行前通知批次檔對照 ──
-  let _batchAll = [];   // 解析後的完整資料快取
+  let _batchAll    = [];   // 解析後的完整資料快取
+  let _batchHeader = [];   // 原始表頭列（匯出用）
 
   function loadBatchFile(input) {
     const file = input.files[0];
@@ -1431,6 +1435,7 @@ function exportSmsExcel() {
     document.getElementById('batchStatsEmpty').classList.add('d-none');
     document.getElementById('batchStatsTableWrap').style.display = 'none';
     document.getElementById('batchStatsLoading').classList.remove('d-none');
+    document.getElementById('exportUnclickedBtn').style.display = 'none';
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -1440,7 +1445,8 @@ function exportSmsExcel() {
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
         // 第一列為標題，找到各欄位 index
-        const header = rows[0].map(h => String(h).trim());
+        _batchHeader = rows[0].map(h => String(h).trim());
+        const header   = _batchHeader;
         const iName    = header.indexOf('姓名');
         const iVenue   = header.findIndex(h => h.includes('參數二') || h === '考場');
         const iSubject = header.findIndex(h => h.includes('參數三') || h === '科別');
@@ -1453,7 +1459,7 @@ function exportSmsExcel() {
           return;
         }
 
-        // 解析每列資料，擷取 6 碼短代碼
+        // 解析每列資料，擷取 6 碼短代碼，並保留完整原始列
         _batchAll = rows.slice(1).filter(r => r[iUrl]).map((r, idx) => {
           const urlStr = String(r[iUrl] || '').trim();
           const code   = urlStr.split('/').pop().trim();   // 取最後一段 = 6碼短代碼
@@ -1464,7 +1470,8 @@ function exportSmsExcel() {
             subject: iSubject >= 0 ? String(r[iSubject] || '').trim() : '',
             shortUrl: urlStr,
             code,
-            clicks: null   // 待查
+            clicks:  null,   // 待查
+            rawRow:  r        // ← 保留原始列（含電話、飲食等所有欄位）
           };
         });
 
@@ -1481,6 +1488,10 @@ function exportSmsExcel() {
           if (result.status !== 'success') return alert('查詢失敗：' + (result.message || ''));
           const clickMap = d.clicks || {};
           _batchAll.forEach(r => { r.clicks = clickMap[r.code] ?? 0; });
+          const unclickedCount = _batchAll.filter(r => r.clicks === 0).length;
+          const exportBtn = document.getElementById('exportUnclickedBtn');
+          exportBtn.textContent = `匯出未點擊批次檔（${unclickedCount} 人）`;
+          exportBtn.style.display = unclickedCount > 0 ? '' : 'none';
           filterBatchStats();
           document.getElementById('batchStatsTableWrap').style.display = '';
         })
@@ -1495,6 +1506,27 @@ function exportSmsExcel() {
       }
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function exportUnclickedBatch() {
+    const unclicked = _batchAll.filter(r => r.clicks === 0);
+    if (unclicked.length === 0) return alert('目前沒有未點擊的委員');
+
+    // 用原始表頭 + 未點擊列的原始資料重建 Excel
+    const sheetData = [_batchHeader, ...unclicked.map(r => r.rawRow)];
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    // 自動欄寬
+    const colWidths = _batchHeader.map((_, ci) => ({
+      wch: Math.max(...sheetData.map(row => String(row[ci] || '').length), 10)
+    }));
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '行前通知(未點擊)');
+
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    XLSX.writeFile(wb, `行前通知未點擊_${dateStr}.xlsx`);
   }
 
   function filterBatchStats() {
