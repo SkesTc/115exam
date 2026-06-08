@@ -691,18 +691,18 @@
       if(dataTable) dataTable.column(5).search(this.value).draw(); 
     });
 
-    // 👇 新增：回覆 (第 7 欄，index 為 6)
-    $('#filterReply').on('change', function(){ 
+    // 👇 新增：回覆 (第 8 欄，index 為 7，新增行前通知欄後 +1)
+    $('#filterReply').on('change', function(){
       if(dataTable) {
         let val = this.value;
         if (val === 'none') {
           // 未回覆的格子文字是單純的 "-"，使用正則表達式精準匹配
-          dataTable.column(6).search('^-$', true, false).draw();
+          dataTable.column(7).search('^-$', true, false).draw();
         } else {
           // 搜尋 "同意" 或 "婉拒" 或 "全部(空字串)"
-          dataTable.column(6).search(val, false, true).draw();
+          dataTable.column(7).search(val, false, true).draw();
         }
-      } 
+      }
     });
 
 
