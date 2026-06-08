@@ -520,46 +520,106 @@
   <div class="modal fade" id="clickStatsModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
-        <div class="modal-header">
+        <div class="modal-header py-2">
           <h5 class="modal-title fw-bold"><i class="fa-solid fa-chart-line me-2"></i>簡訊點擊統計</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
+        <!-- Tab 切換 -->
+        <ul class="nav nav-tabs px-3 pt-2 border-bottom-0" id="clickStatsTabs">
+          <li class="nav-item">
+            <button class="nav-link active" id="tab-candidate" data-bs-toggle="tab" data-bs-target="#pane-candidate" type="button">
+              <i class="fa-solid fa-users me-1"></i>邀請簡訊
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" id="tab-prenotice" data-bs-toggle="tab" data-bs-target="#pane-prenotice" type="button">
+              <i class="fa-solid fa-bell me-1"></i>行前通知批次檔
+            </button>
+          </li>
+        </ul>
         <div class="modal-body p-0">
-          <div id="clickStatsLoading" class="text-center py-5 text-muted">
-            <div class="spinner-border spinner-border-sm me-2"></div>載入中…
-          </div>
-          <div id="clickStatsContent" style="display:none;">
-            <div class="px-3 pt-2 pb-1 d-flex gap-2 align-items-center flex-wrap border-bottom">
-              <input type="text" id="clickStatsSearch" class="form-control form-control-sm" placeholder="搜尋姓名 / 科別…" style="max-width:220px;" oninput="filterClickStats()">
-              <select id="clickStatsBatchFilter" class="form-select form-select-sm" style="max-width:100px;" onchange="filterClickStats()">
-                <option value="">全部梯次</option>
-                <option value="1">內聘</option>
-                <option value="2">外聘</option>
-              </select>
-              <select id="clickStatsTypeFilter" class="form-select form-select-sm" style="max-width:130px;" onchange="filterClickStats()">
-                <option value="">全部委員</option>
-                <option value="clicked">有點擊紀錄</option>
-              </select>
-              <span id="clickStatsCount" class="text-muted small"></span>
+          <div class="tab-content">
+
+            <!-- ── Tab 1：邀請簡訊（原有功能）── -->
+            <div class="tab-pane fade show active" id="pane-candidate">
+              <div id="clickStatsLoading" class="text-center py-5 text-muted">
+                <div class="spinner-border spinner-border-sm me-2"></div>載入中…
+              </div>
+              <div id="clickStatsContent" style="display:none;">
+                <div class="px-3 pt-2 pb-1 d-flex gap-2 align-items-center flex-wrap border-bottom">
+                  <input type="text" id="clickStatsSearch" class="form-control form-control-sm" placeholder="搜尋姓名 / 科別…" style="max-width:220px;" oninput="filterClickStats()">
+                  <select id="clickStatsBatchFilter" class="form-select form-select-sm" style="max-width:100px;" onchange="filterClickStats()">
+                    <option value="">全部梯次</option>
+                    <option value="1">內聘</option>
+                    <option value="2">外聘</option>
+                  </select>
+                  <select id="clickStatsTypeFilter" class="form-select form-select-sm" style="max-width:130px;" onchange="filterClickStats()">
+                    <option value="">全部委員</option>
+                    <option value="clicked">有點擊紀錄</option>
+                  </select>
+                  <span id="clickStatsCount" class="text-muted small"></span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm table-hover mb-0">
+                    <thead class="table-dark sticky-top">
+                      <tr>
+                        <th>#</th><th>姓名</th><th>科別</th><th>梯次</th><th>意願</th>
+                        <th class="text-center">邀請簡訊<br><small class="fw-normal opacity-75">點擊次數</small></th>
+                        <th class="text-center">行前通知<br><small class="fw-normal opacity-75">點擊次數</small></th>
+                        <th class="text-center">合計</th>
+                      </tr>
+                    </thead>
+                    <tbody id="clickStatsTbody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
-            <div class="table-responsive">
-              <table class="table table-sm table-hover mb-0" id="clickStatsTable">
-                <thead class="table-dark sticky-top">
-                  <tr>
-                    <th>#</th>
-                    <th>姓名</th>
-                    <th>科別</th>
-                    <th>梯次</th>
-                    <th>意願</th>
-                    <th class="text-center">邀請簡訊<br><small class="fw-normal opacity-75">點擊次數</small></th>
-                    <th class="text-center">行前通知<br><small class="fw-normal opacity-75">點擊次數</small></th>
-                    <th class="text-center">合計</th>
-                  </tr>
-                </thead>
-                <tbody id="clickStatsTbody"></tbody>
-              </table>
+
+            <!-- ── Tab 2：行前通知批次檔對照 ── -->
+            <div class="tab-pane fade" id="pane-prenotice">
+              <div class="p-3 border-bottom bg-light">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                  <div>
+                    <label class="form-label mb-1 small fw-semibold">上傳行前通知簡訊批次檔（.xlsx）</label>
+                    <input type="file" class="form-control form-control-sm" id="batchFileInput" accept=".xlsx"
+                           style="max-width:340px;" onchange="loadBatchFile(this)">
+                  </div>
+                  <div class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+                    <input type="text" id="batchSearch" class="form-control form-control-sm" placeholder="搜尋姓名 / 科別…" style="max-width:180px;" oninput="filterBatchStats()">
+                    <select id="batchClickFilter" class="form-select form-select-sm" style="max-width:130px;" onchange="filterBatchStats()">
+                      <option value="">全部委員</option>
+                      <option value="clicked">有點擊</option>
+                      <option value="none">未點擊</option>
+                    </select>
+                    <span id="batchStatsCount" class="text-muted small"></span>
+                  </div>
+                </div>
+              </div>
+              <div id="batchStatsLoading" class="text-center py-5 text-muted d-none">
+                <div class="spinner-border spinner-border-sm me-2"></div>查詢點擊次數中…
+              </div>
+              <div id="batchStatsEmpty" class="text-center py-5 text-muted">
+                <i class="fa-solid fa-file-arrow-up fa-2x mb-2 d-block opacity-50"></i>
+                請上傳行前通知簡訊批次檔
+              </div>
+              <div class="table-responsive" id="batchStatsTableWrap" style="display:none;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-dark sticky-top">
+                    <tr>
+                      <th>#</th>
+                      <th>姓名</th>
+                      <th>考場</th>
+                      <th>科別</th>
+                      <th>縮網址</th>
+                      <th class="text-center">行前通知<br><small class="fw-normal opacity-75">點擊次數</small></th>
+                    </tr>
+                  </thead>
+                  <tbody id="batchStatsTbody"></tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+          </div><!-- /tab-content -->
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
@@ -1359,6 +1419,119 @@ function exportSmsExcel() {
       }).join('');
     }
     document.getElementById('clickStatsCount').textContent = `共 ${list.length} 筆`;
+  }
+
+  // ── 行前通知批次檔對照 ──
+  let _batchAll = [];   // 解析後的完整資料快取
+
+  function loadBatchFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    document.getElementById('batchStatsEmpty').classList.add('d-none');
+    document.getElementById('batchStatsTableWrap').style.display = 'none';
+    document.getElementById('batchStatsLoading').classList.remove('d-none');
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const wb   = XLSX.read(e.target.result, { type: 'array' });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        // 第一列為標題，找到各欄位 index
+        const header = rows[0].map(h => String(h).trim());
+        const iName    = header.indexOf('姓名');
+        const iVenue   = header.findIndex(h => h.includes('參數二') || h === '考場');
+        const iSubject = header.findIndex(h => h.includes('參數三') || h === '科別');
+        const iUrl     = header.findIndex(h => h.includes('參數四') || h === '縮網址');
+
+        if (iUrl === -1) {
+          alert('找不到縮網址欄位（參數四）');
+          document.getElementById('batchStatsLoading').classList.add('d-none');
+          document.getElementById('batchStatsEmpty').classList.remove('d-none');
+          return;
+        }
+
+        // 解析每列資料，擷取 6 碼短代碼
+        _batchAll = rows.slice(1).filter(r => r[iUrl]).map((r, idx) => {
+          const urlStr = String(r[iUrl] || '').trim();
+          const code   = urlStr.split('/').pop().trim();   // 取最後一段 = 6碼短代碼
+          return {
+            rowIdx:  idx + 1,
+            name:    iName    >= 0 ? String(r[iName]    || '').trim() : '',
+            venue:   iVenue   >= 0 ? String(r[iVenue]   || '').trim() : '',
+            subject: iSubject >= 0 ? String(r[iSubject] || '').trim() : '',
+            shortUrl: urlStr,
+            code,
+            clicks: null   // 待查
+          };
+        });
+
+        // 送出所有短代碼，一次查點擊次數
+        const codes = _batchAll.map(r => r.code);
+        fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getClicksByShortCodes', data: { codes } })
+        })
+        .then(res => res.json())
+        .then(result => {
+          document.getElementById('batchStatsLoading').classList.add('d-none');
+          const d = result.data || result;
+          if (result.status !== 'success') return alert('查詢失敗：' + (result.message || ''));
+          const clickMap = d.clicks || {};
+          _batchAll.forEach(r => { r.clicks = clickMap[r.code] ?? 0; });
+          filterBatchStats();
+          document.getElementById('batchStatsTableWrap').style.display = '';
+        })
+        .catch(err => {
+          document.getElementById('batchStatsLoading').classList.add('d-none');
+          alert('連線錯誤：' + err);
+        });
+
+      } catch(ex) {
+        document.getElementById('batchStatsLoading').classList.add('d-none');
+        alert('讀取 Excel 失敗：' + ex);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function filterBatchStats() {
+    const q       = document.getElementById('batchSearch').value.toLowerCase();
+    const cfType  = document.getElementById('batchClickFilter').value;
+    const filtered = _batchAll.filter(r => {
+      if (q && !r.name.includes(q) && !r.subject.includes(q) && !r.venue.includes(q)) return false;
+      if (cfType === 'clicked' && r.clicks === 0) return false;
+      if (cfType === 'none'    && r.clicks  >  0) return false;
+      return true;
+    });
+    renderBatchStats(filtered);
+  }
+
+  function renderBatchStats(list) {
+    document.getElementById('batchStatsCount').textContent = `共 ${list.length} 筆`;
+    const tbody = document.getElementById('batchStatsTbody');
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">無資料</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map((r, i) => {
+      const badge = r.clicks > 0
+        ? `<span class="badge bg-success rounded-pill">${r.clicks}</span>`
+        : `<span class="text-muted">—</span>`;
+      const urlDisplay = r.shortUrl
+        ? `<a href="https://${r.shortUrl}" target="_blank" class="font-monospace small">${r.shortUrl}</a>`
+        : '';
+      return `<tr>
+        <td class="text-muted">${i + 1}</td>
+        <td class="fw-semibold">${r.name}</td>
+        <td><small>${r.venue}</small></td>
+        <td><small>${r.subject}</small></td>
+        <td>${urlDisplay}</td>
+        <td class="text-center">${badge}</td>
+      </tr>`;
+    }).join('');
   }
 
   // ── UrlShortener 診斷 ──
