@@ -266,10 +266,10 @@
         <button class="btn btn-dark admin-only" onclick="openTemplateModal()"><i class="fa-solid fa-pen-to-square me-1"></i>範本設定</button>
 
         <div class="vr admin-only"></div>
-        <button class="btn btn-warning admin-only" onclick="resendSelected()"><i class="fa-regular fa-envelope me-1"></i>寄信</button>
+        <button class="btn btn-warning admin-only" onclick="resendSelected()"><i class="fa-regular fa-envelope me-1"></i>寄邀請信</button>
         <!--<button class="btn btn-info text-white admin-only" onclick="openSMSModal()"><i class="fa-regular fa-comment-dots me-1"></i>簡訊</button>-->
         <button class="btn btn-outline-success btn-sm me-2 admin-only" onclick="exportSmsExcel()">
-        <i class="fas fa-file-csv"></i> 簡訊批次檔</button>
+        <i class="fas fa-file-csv"></i> 邀請簡訊批次檔</button>
         <div class="vr admin-only"></div>
         <button class="btn btn-info text-white admin-only" onclick="sendPreNoticeEmail()"><i class="fa-solid fa-bell me-1"></i>行前通知(信)</button>
         <button class="btn btn-outline-info admin-only" onclick="exportPreNoticeSmsExcel()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊批次檔)</button>
@@ -557,8 +557,12 @@
                   <select id="clickStatsTypeFilter" class="form-select form-select-sm" style="max-width:130px;" onchange="filterClickStats()">
                     <option value="">全部委員</option>
                     <option value="clicked">有點擊紀錄</option>
+                    <option value="unclicked">未點擊</option>
                   </select>
                   <span id="clickStatsCount" class="text-muted small"></span>
+                  <button id="exportInviteUnclickedBtn" class="btn btn-warning btn-sm ms-1" style="display:none;" onclick="exportInviteUnclickedSms()">
+                    <i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊簡訊批次檔
+                  </button>
                 </div>
                 <div class="table-responsive">
                   <table class="table table-sm table-hover mb-0">
@@ -1382,6 +1386,7 @@ function exportSmsExcel() {
         _clickStatsAll = d.stats || [];
         renderClickStats(_clickStatsAll);
         document.getElementById('clickStatsContent').style.display = '';
+        filterClickStats(); // 初始化篩選（順便顯示未點擊匯出按鈕人數）
       })
       .catch(err => {
         document.getElementById('clickStatsLoading').style.display = 'none';
@@ -1396,10 +1401,19 @@ function exportSmsExcel() {
     const filtered = _clickStatsAll.filter(r => {
       if (q && !r.name.includes(q) && !r.subject.includes(q)) return false;
       if (batch && String(r.batch) !== batch) return false;
-      if (type === 'clicked' && (r.inviteClicks + r.preNoticeClicks + (r.preNoticeGroupClicks || 0)) === 0) return false;
+      if (type === 'clicked'   && (r.inviteClicks + r.preNoticeClicks + (r.preNoticeGroupClicks || 0)) === 0) return false;
+      if (type === 'unclicked' && r.inviteClicks > 0) return false;
       return true;
     });
     renderClickStats(filtered);
+
+    // 顯示/隱藏 匯出未點擊按鈕，並顯示人數
+    const exportBtn = document.getElementById('exportInviteUnclickedBtn');
+    if (exportBtn && _clickStatsAll.length > 0) {
+      const unclickedCount = _clickStatsAll.filter(r => r.inviteClicks === 0).length;
+      exportBtn.style.display = unclickedCount > 0 ? '' : 'none';
+      exportBtn.innerHTML = `<i class="fa-solid fa-file-arrow-down me-1"></i>匯出未點擊簡訊批次檔（${unclickedCount} 人）`;
+    }
   }
 
   function renderClickStats(list) {
@@ -1440,6 +1454,42 @@ function exportSmsExcel() {
       }).join('');
     }
     document.getElementById('clickStatsCount').textContent = `共 ${list.length} 筆`;
+  }
+
+  // ── 匯出邀請簡訊「未點擊」批次檔 ──
+  function exportInviteUnclickedSms() {
+    const unclickedUids = _clickStatsAll
+      .filter(r => r.inviteClicks === 0)
+      .map(r => r.uid);
+    if (unclickedUids.length === 0) return alert('沒有未點擊的委員');
+
+    const btn = document.getElementById('exportInviteUnclickedBtn');
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>產生中…';
+
+    fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'adminExportSmsData', data: unclickedUids })
+    })
+    .then(r => r.json())
+    .then(result => {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      const d = result.data || result;
+      if (result.status !== 'success' || !d.excelData) return alert('匯出失敗：' + (result.message || ''));
+      const rows = d.excelData;
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '邀請簡訊未點擊');
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      XLSX.writeFile(wb, `邀請簡訊未點擊_${dateStr}.xlsx`);
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      alert('連線錯誤：' + err);
+    });
   }
 
   // ── 行前通知批次檔對照 ──
