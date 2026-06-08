@@ -611,6 +611,7 @@
                     <tr>
                       <th>#</th>
                       <th>姓名</th>
+                      <th>電子郵件</th>
                       <th>考場</th>
                       <th>科別</th>
                       <th>縮網址</th>
@@ -1448,6 +1449,7 @@ function exportSmsExcel() {
         _batchHeader = rows[0].map(h => String(h).trim());
         const header   = _batchHeader;
         const iName    = header.indexOf('姓名');
+        const iEmail   = header.findIndex(h => h.includes('電子郵件') || h === 'email' || h === 'Email');
         const iVenue   = header.findIndex(h => h.includes('參數二') || h === '考場');
         const iSubject = header.findIndex(h => h.includes('參數三') || h === '科別');
         const iUrl     = header.findIndex(h => h.includes('參數四') || h === '縮網址');
@@ -1466,6 +1468,7 @@ function exportSmsExcel() {
           return {
             rowIdx:  idx + 1,
             name:    iName    >= 0 ? String(r[iName]    || '').trim() : '',
+            email:   iEmail   >= 0 ? String(r[iEmail]   || '').trim() : '',
             venue:   iVenue   >= 0 ? String(r[iVenue]   || '').trim() : '',
             subject: iSubject >= 0 ? String(r[iSubject] || '').trim() : '',
             shortUrl: urlStr,
@@ -1545,7 +1548,7 @@ function exportSmsExcel() {
     document.getElementById('batchStatsCount').textContent = `共 ${list.length} 筆`;
     const tbody = document.getElementById('batchStatsTbody');
     if (list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">無資料</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">無資料</td></tr>';
       return;
     }
     tbody.innerHTML = list.map((r, i) => {
@@ -1558,6 +1561,7 @@ function exportSmsExcel() {
       return `<tr>
         <td class="text-muted">${i + 1}</td>
         <td class="fw-semibold">${r.name}</td>
+        <td><small class="text-muted">${r.email || ''}</small></td>
         <td><small>${r.venue}</small></td>
         <td><small>${r.subject}</small></td>
         <td>${urlDisplay}</td>

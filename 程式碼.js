@@ -38,6 +38,10 @@ function doGet(e) {
       data = getCandidateInfo(p.uid);
     } else if (action === 'getSmsConfig') {
       data = getSmsConfig();
+    } else if (action === 'getClickStats') {
+      data = getClickStats();
+    } else if (action === 'getUrlShortenerDebug') {
+      data = getUrlShortenerDebug();
     } else if (action === 'resolveShortCode') {
       // 處理前端丟過來的短代碼解析請求
       data = resolveShortCode(p.s);
@@ -86,6 +90,7 @@ function doPost(e) {
     else if (action === 'adminExportSmsData') { responseData = adminExportSmsData(payload.ids); }
     else if (action === 'adminExportPreNoticeSmsData') { responseData = adminExportPreNoticeSmsData(payload.ids); }
     else if (action === 'exportCheckInBook') { responseData = exportCheckInBook(payload.ids); }
+    else if (action === 'getClicksByShortCodes') { responseData = getClicksByShortCodes(payload.codes); }
     else {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 POST 請求' })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -175,7 +180,7 @@ function adminExportPreNoticeSmsData(ids) {
     const cloudLinkRaw   = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
     // 批次檔雲端連結轉短網址（去除 https:// 前綴，符合簡訊格式）
     const cloudLink = cloudLinkRaw
-      ? createShortUrl(cloudLinkRaw).replace(/^https?:\/\//i, '')
+      ? createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '')  // 帶入 uid 標記
       : '';
 
     exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
@@ -532,8 +537,7 @@ function adminSendSMS(ids, template) {
     // 格式化電話號碼 (移除空白與橫線)
     const phone = String(phoneRaw).replace(/[-\s]/g, "");
     const longLink = FRONTEND_URL + "?uid=" + data[i][0];
-    //const link = getShortUrl(longLink);
-    const link = createShortUrl(longLink); // 改用自建的縮網址
+    const link = createShortUrl(longLink, data[i][0]); // 帶入 uid 標記
     const smsLink = link.replace(/^https?:\/\//i, '');
     // 替換簡訊內容變數
     const msgContent = template
@@ -759,16 +763,20 @@ function adminSendPreNoticeSMS(ids, template) {
     if (willingness !== 'yes') continue;
     if (!phone) continue;
 
-    const venue     = getVenueBySubject(subject, venueMap);
-    const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
-    const msg = shortenUrlsInText(template  // 自動縮短簡訊中的網址
+    const venue        = getVenueBySubject(subject, venueMap);
+    const cloudLinkRaw = getCloudLinkBySubject(subject, batch, venueMap);
+    // 預先建立有 uid 標記的短網址，讓 shortenUrlsInText 不會重複縮它
+    const cloudShort = cloudLinkRaw
+      ? createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '')
+      : '';
+    const msg = shortenUrlsInText(template
       .replace(/{{姓名}}/g, name)
       .replace(/{{職稱}}/g, title)
       .replace(/{{科別}}/g, subject)
       .replace(/{{單位}}/g, unit)
       .replace(/{{飲食}}/g, diet)
       .replace(/{{考場}}/g, venue)
-      .replace(/{{雲端連結}}/g, cloudLink));
+      .replace(/{{雲端連結}}/g, cloudShort));
 
     const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
     try {
@@ -1103,7 +1111,7 @@ function exportCheckInBook(ids) {
 // ==========================================
 // 11. 系統自建縮網址功能
 // ==========================================
-function createShortUrl(longUrl) {
+function createShortUrl(longUrl, note = '') {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let shortCode = '';
   for (let i = 0; i < 6; i++) {
@@ -1114,14 +1122,152 @@ function createShortUrl(longUrl) {
   let sheet = ss.getSheetByName("UrlShortener");
   if (!sheet) {
     sheet = ss.insertSheet("UrlShortener");
-    sheet.appendRow(["短代碼", "原始網址", "建立時間", "點擊次數"]);
+    sheet.appendRow(["短代碼", "原始網址", "建立時間", "點擊次數", "uid標記"]);
     sheet.setFrozenRows(1);
   }
 
-  sheet.appendRow([shortCode, longUrl, new Date(), 0]);
+  sheet.appendRow([shortCode, longUrl, new Date(), 0, note]);
 
-  // ★ 關鍵修改：把 "?s=" 拿掉，直接加上 "/" 和短代碼
   return FRONTEND_URL + "/" + shortCode;
+}
+
+// ==========================================
+// 12. 點擊統計（依委員彙整 UrlShortener）
+// ==========================================
+function getClickStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet = ss.getSheetByName("UrlShortener");
+  const candSheet = ss.getSheetByName(SHEET_NAME);
+  if (!urlSheet || !candSheet) return { status: 'success', stats: [] };
+
+  const urlData  = urlSheet.getDataRange().getValues();
+  const candData = candSheet.getDataRange().getValues();
+
+  // ── 從 Drive URL 擷取資料夾 ID（對抗 URL 格式差異）──
+  const extractFolderId = url => {
+    const m = String(url || '').match(/folders\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  };
+
+  // ── 建立「Drive 資料夾ID → 科別|梯次」反向查詢（用於舊的未標記行前通知連結）──
+  const venueMap = buildVenueMap();
+  const driveIdToKey = {};   // folderId → "subject|batch"
+  for (const [subject, entry] of Object.entries(venueMap)) {
+    const idNei = extractFolderId(entry.linkNei);
+    const idWai = extractFolderId(entry.linkWai);
+    if (idNei) driveIdToKey[idNei] = subject + '|1';
+    if (idWai) driveIdToKey[idWai] = subject + '|2';
+  }
+
+  // "subject|batch" → 群組未標記點擊總計
+  const untaggedPreNotice = {};
+
+  // uid → { inviteClicks, preNoticeClicks }
+  const statsMap = {};
+
+  for (let i = 1; i < urlData.length; i++) {
+    const longUrl  = String(urlData[i][1] || '').trim();
+    const clicks   = Number(urlData[i][3]) || 0;
+    const note     = String(urlData[i][4] || '').trim();  // uid標記（第5欄）
+
+    const uidInUrl  = (longUrl.match(/[?&]uid=([^&]+)/) || [])[1] || '';
+    const folderId  = extractFolderId(longUrl);
+    let uid  = null;
+    let type = null;
+
+    if (uidInUrl) {
+      // 邀請簡訊連結（URL 含 uid）
+      uid  = uidInUrl;
+      type = 'invite';
+    } else if (note) {
+      // 行前通知雲端連結（第5欄有 uid 標記，新批次）
+      uid  = note;
+      type = 'prenotice';
+    } else if (folderId && driveIdToKey[folderId]) {
+      // 舊批次行前通知（無 uid 標記，用資料夾 ID 對應科別+梯次）
+      const key = driveIdToKey[folderId];
+      untaggedPreNotice[key] = (untaggedPreNotice[key] || 0) + clicks;
+      continue;
+    }
+
+    if (!uid) continue;
+    if (!statsMap[uid]) statsMap[uid] = { inviteClicks: 0, preNoticeClicks: 0 };
+    if (type === 'invite')     statsMap[uid].inviteClicks     += clicks;
+    if (type === 'prenotice')  statsMap[uid].preNoticeClicks  += clicks;
+  }
+
+  // 整合候選人基本資料
+  const stats = [];
+  for (let i = 1; i < candData.length; i++) {
+    const uid     = String(candData[i][0] || '').trim();
+    if (!uid) continue;
+    const subject = String(candData[i][2] || '').trim();
+    const batch   = String(candData[i][4] || '1').trim();
+    const s = statsMap[uid] || { inviteClicks: 0, preNoticeClicks: 0 };
+
+    // 若個人無 tagged 行前通知點擊，補充群組未標記資料（舊批次共用，僅供參考）
+    const groupKey = subject + '|' + batch;
+    const preNoticeGroupClicks = untaggedPreNotice[groupKey] || 0;
+
+    stats.push({
+      uid,
+      name:                 candData[i][1]  || '',
+      subject,
+      batch,
+      willingness:          candData[i][6]  || '',
+      inviteClicks:         s.inviteClicks,
+      preNoticeClicks:      s.preNoticeClicks,
+      preNoticeGroupClicks  // 群組總計（舊批次無法識別個人，多人共享同一數字）
+    });
+  }
+
+  return { status: 'success', stats };
+}
+
+// ==========================================
+// 12-b. 依短代碼批次查詢點擊次數（供行前通知批次檔對照使用）
+// ==========================================
+function getClicksByShortCodes(codes) {
+  if (!Array.isArray(codes) || codes.length === 0)
+    return { status: 'success', clicks: {} };
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("UrlShortener");
+  if (!sheet) return { status: 'success', clicks: {} };
+
+  const data = sheet.getDataRange().getValues();
+  const codeSet = new Set(codes.map(c => String(c).trim()));
+  const result = {};
+
+  for (let i = 1; i < data.length; i++) {
+    const code   = String(data[i][0] || '').trim();
+    const clicks = Number(data[i][3]) || 0;
+    if (codeSet.has(code)) {
+      result[code] = clicks;
+    }
+  }
+
+  return { status: 'success', clicks: result };
+}
+
+// ==========================================
+// 12-c. UrlShortener 診斷（debug 用）
+// ==========================================
+function getUrlShortenerDebug() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("UrlShortener");
+  if (!sheet) return { status: 'success', rows: [], message: '找不到 UrlShortener 分頁' };
+
+  const data = sheet.getDataRange().getValues();
+  const rows = data.slice(0, 50).map((r, i) => ({
+    rowNum:    i,
+    col_A:     String(r[0] || ''),   // 短代碼
+    col_B:     String(r[1] || ''),   // 原始網址（縮短）
+    col_D:     r[3] !== undefined ? r[3] : '(無)',  // 點擊次數
+    col_E:     r[4] !== undefined ? String(r[4]) : '(無)',  // uid標記
+    totalCols: r.length
+  }));
+
+  return { status: 'success', rows, totalRows: data.length };
 }
 
 // ==========================================
