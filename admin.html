@@ -274,6 +274,7 @@
         <button class="btn btn-info text-white admin-only" onclick="sendPreNoticeEmail()"><i class="fa-solid fa-bell me-1"></i>行前通知(信)</button>
         <button class="btn btn-outline-info admin-only" onclick="exportPreNoticeSmsExcel()"><i class="fa-solid fa-bell me-1"></i>行前通知(簡訊批次檔)</button>
         <button class="btn btn-secondary" onclick="exportCheckInBook()"><i class="fa-solid fa-clipboard-list me-1"></i>委員簽到表</button>
+        <button class="btn btn-outline-secondary admin-only" onclick="openClickStats()"><i class="fa-solid fa-chart-line me-1"></i>點擊統計</button>
         <button class="btn btn-danger admin-only" onclick="deleteSelected()"><i class="fa-regular fa-trash-can me-1"></i>刪除</button>
       </div>
     </div>
@@ -514,6 +515,59 @@
       <button type="button" class="btn btn-info text-white" onclick="sendPreNoticeSms()"><i class="fa-regular fa-paper-plane me-1"></i>開始發送</button>
     </div>
   </div></div></div>
+
+  <!-- ★ 點擊統計 Modal ★ -->
+  <div class="modal fade" id="clickStatsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold"><i class="fa-solid fa-chart-line me-2"></i>簡訊點擊統計</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-0">
+          <div id="clickStatsLoading" class="text-center py-5 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>載入中…
+          </div>
+          <div id="clickStatsContent" style="display:none;">
+            <div class="px-3 pt-2 pb-1 d-flex gap-2 align-items-center flex-wrap border-bottom">
+              <input type="text" id="clickStatsSearch" class="form-control form-control-sm" placeholder="搜尋姓名 / 科別…" style="max-width:220px;" oninput="filterClickStats()">
+              <select id="clickStatsBatchFilter" class="form-select form-select-sm" style="max-width:100px;" onchange="filterClickStats()">
+                <option value="">全部梯次</option>
+                <option value="1">內聘</option>
+                <option value="2">外聘</option>
+              </select>
+              <select id="clickStatsTypeFilter" class="form-select form-select-sm" style="max-width:130px;" onchange="filterClickStats()">
+                <option value="">全部委員</option>
+                <option value="clicked">有點擊紀錄</option>
+              </select>
+              <span id="clickStatsCount" class="text-muted small"></span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0" id="clickStatsTable">
+                <thead class="table-dark sticky-top">
+                  <tr>
+                    <th>#</th>
+                    <th>姓名</th>
+                    <th>科別</th>
+                    <th>梯次</th>
+                    <th>意願</th>
+                    <th class="text-center">邀請簡訊<br><small class="fw-normal opacity-75">點擊次數</small></th>
+                    <th class="text-center">行前通知<br><small class="fw-normal opacity-75">點擊次數</small></th>
+                    <th class="text-center">合計</th>
+                  </tr>
+                </thead>
+                <tbody id="clickStatsTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadClickStats()"><i class="fa-solid fa-arrows-rotate me-1"></i>重新整理</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -1223,6 +1277,77 @@ function exportSmsExcel() {
       XLSX.writeFile(wb, `行前通知簡訊_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`);
     })
     .catch(() => { btn.innerHTML = orig; btn.disabled = false; alert("發生錯誤，請稍後再試。"); });
+  }
+
+  // ── 點擊統計 ──
+  let _clickStatsAll = [];   // 快取全部資料，供篩選用
+
+  function openClickStats() {
+    const modal = new bootstrap.Modal(document.getElementById('clickStatsModal'));
+    modal.show();
+    loadClickStats();
+  }
+
+  function loadClickStats() {
+    document.getElementById('clickStatsLoading').style.display = '';
+    document.getElementById('clickStatsContent').style.display = 'none';
+    fetch(`${API_URL}?action=getClickStats`)
+      .then(r => r.json())
+      .then(result => {
+        document.getElementById('clickStatsLoading').style.display = 'none';
+        const d = result.data || result;
+        if (result.status !== 'success') return alert('載入失敗：' + (result.message || ''));
+        _clickStatsAll = d.stats || [];
+        renderClickStats(_clickStatsAll);
+        document.getElementById('clickStatsContent').style.display = '';
+      })
+      .catch(err => {
+        document.getElementById('clickStatsLoading').style.display = 'none';
+        alert('連線錯誤：' + err);
+      });
+  }
+
+  function filterClickStats() {
+    const q     = document.getElementById('clickStatsSearch').value.toLowerCase();
+    const batch = document.getElementById('clickStatsBatchFilter').value;
+    const type  = document.getElementById('clickStatsTypeFilter').value;
+    const filtered = _clickStatsAll.filter(r => {
+      if (q && !r.name.includes(q) && !r.subject.includes(q)) return false;
+      if (batch && String(r.batch) !== batch) return false;
+      if (type === 'clicked' && (r.inviteClicks + r.preNoticeClicks) === 0) return false;
+      return true;
+    });
+    renderClickStats(filtered);
+  }
+
+  function renderClickStats(list) {
+    const batchLabel = b => b == 2 ? '<span class="badge bg-warning text-dark">外聘</span>' : '<span class="badge bg-primary">內聘</span>';
+    const wilLabel   = w => w === 'yes' ? '<span class="badge bg-success">同意</span>'
+                          : w === 'no'  ? '<span class="badge bg-danger">婉拒</span>'
+                          : '<span class="badge bg-secondary">未回覆</span>';
+    const clickBadge = n => n > 0
+      ? `<span class="badge bg-success rounded-pill">${n}</span>`
+      : `<span class="text-muted">—</span>`;
+
+    const tbody = document.getElementById('clickStatsTbody');
+    if (list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">無資料</td></tr>';
+    } else {
+      tbody.innerHTML = list.map((r, i) => {
+        const total = r.inviteClicks + r.preNoticeClicks;
+        return `<tr>
+          <td class="text-muted">${i + 1}</td>
+          <td class="fw-semibold">${r.name}</td>
+          <td><small>${r.subject}</small></td>
+          <td>${batchLabel(r.batch)}</td>
+          <td>${wilLabel(r.willingness)}</td>
+          <td class="text-center">${clickBadge(r.inviteClicks)}</td>
+          <td class="text-center">${clickBadge(r.preNoticeClicks)}</td>
+          <td class="text-center fw-bold">${total > 0 ? total : '<span class="text-muted">—</span>'}</td>
+        </tr>`;
+      }).join('');
+    }
+    document.getElementById('clickStatsCount').textContent = `共 ${list.length} 筆`;
   }
 
   // ── 委員簽到表（直式 PDF 列印） ──
