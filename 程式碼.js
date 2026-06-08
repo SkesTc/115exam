@@ -19,7 +19,11 @@ function doGet(e) {
   // 1. 攔截信件已讀追蹤 (Tracking Pixel)
   if (p.track && p.uid) {
     try {
-      recordEmailOpen(p.uid);
+      if (p.track === 'prenotice') {
+        recordPreNoticeEmailOpen(p.uid);
+      } else {
+        recordEmailOpen(p.uid);
+      }
     } catch(err) {}
     const d = Utilities.base64Decode("R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==");
     return ContentService.createTextOutput("").append(d).setMimeType(ContentService.MimeType.PNG);
@@ -284,16 +288,19 @@ function getAdminData(timestamp) {
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
     stats.total++;
-    const batch = data[i][4] || "1"; 
+    const batch = data[i][4] || "1";
     const status = data[i][5];
     const willingness = data[i][6];
-    const diet = data[i][7] || ""; 
+    const diet = data[i][7] || "";
     const note = data[i][8];
     const readTime = data[i][10];
     const phone = data[i][11];
-    const unit = data[i][12] || ""; 
+    const unit = data[i][12] || "";
     const title = data[i][13] || "";
     const smsStatus = data[i][14];
+    const preNoticeStatus = data[i][15] || "";
+    const preNoticeReadTime = data[i][16];
+    const preNoticeSmsStatus = data[i][17];
 
     if (status === "已發送") stats.sent++;
     if (readTime) stats.read++;
@@ -306,8 +313,8 @@ function getAdminData(timestamp) {
       name: data[i][1],
       subject: data[i][2],
       email: data[i][3],
-      batch: batch, 
-      phone: phone, 
+      batch: batch,
+      phone: phone,
       unit: unit,
       title: title,
       status: status,
@@ -316,7 +323,10 @@ function getAdminData(timestamp) {
       diet: diet,
       note: note,
       readTime: fmtTime(readTime),
-      replyTime: fmtTime(data[i][9])
+      replyTime: fmtTime(data[i][9]),
+      preNoticeStatus: preNoticeStatus,
+      preNoticeReadTime: fmtTime(preNoticeReadTime),
+      preNoticeSmsStatus: preNoticeSmsStatus ? fmtTime(preNoticeSmsStatus) : ""
     });
   }
   return { stats: stats, list: list, smsTemplate: smsTemplate, appUrl: WEB_APP_URL };
@@ -350,11 +360,14 @@ function adminAddCandidate(f){
     String(f.phone || "").trim(),  // 12. 電話
     f.unit || "",                  // 13. 單位
     f.title || "",                 // 14. 職稱
-    ""                             // 15. 簡訊狀態
+    "",                            // 15. 簡訊狀態
+    "",                            // 16. 行前通知信狀態
+    "",                            // 17. 行前通知信已讀時間
+    ""                             // 18. 行前通知簡訊狀態
   ];
-  
-  // 將 15 個欄位的陣列寫入試算表
-  s.getRange(nr, 1, 1, 15).setValues([d]);
+
+  // 將 18 個欄位的陣列寫入試算表
+  s.getRange(nr, 1, 1, 18).setValues([d]);
   SpreadsheetApp.flush();
   lock.releaseLock();
   
@@ -423,15 +436,18 @@ function adminBatchImport(L) {
         String(m.phone || ""), // 12. 電話
         m.unit || "",          // 13. 單位
         m.title || "",         // 14. 職稱
-        ""                     // 15. 簡訊狀態
+        "",                    // 15. 簡訊狀態
+        "",                    // 16. 行前通知信狀態
+        "",                    // 17. 行前通知信已讀時間
+        ""                     // 18. 行前通知簡訊狀態
       ]);
     }
   }
   
   if (n.length > 0) {
     const r = s.getLastRow() + 1;
-    s.getRange(r, 12, n.length, 1).setNumberFormat("@"); 
-    s.getRange(r, 1, n.length, 15).setValues(n);
+    s.getRange(r, 12, n.length, 1).setNumberFormat("@");
+    s.getRange(r, 1, n.length, 18).setValues(n);
     SpreadsheetApp.flush();
     return { status: 'success', count: n.length };
   }
@@ -730,7 +746,12 @@ function adminSendPreNotice(ids) {
         .replace(/{{diet}}/g, diet)
         .replace(/{{venue}}/g, venue)
         .replace(/{{雲端連結}}/g, cloudLink);
-      GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
+      // 行前通知追蹤像素
+      const tLink = WEB_APP_URL + "?track=prenotice&uid=" + uid;
+      const img = `<img src="${tLink}" width="1" height="1" style="display:none;"/>`;
+      GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body + img, name: "教甄委員會" });
+      // 記錄「行前通知信狀態」為「已發送」(第 16 欄 = P)
+      sheet.getRange(i + 1, 16).setValue("已發送");
       count++;
     } catch(e) { console.error('PreNotice email error:', e); }
   }
@@ -791,6 +812,8 @@ function adminSendPreNoticeSMS(ids, template) {
       } else {
         logs.push({ name, msg: '成功 (餘額:' + parts[0] + ')' });
         successCount++;
+        // 記錄「行前通知簡訊狀態」時間戳 (第 18 欄 = R)
+        sheet.getRange(i + 1, 18).setValue(new Date());
       }
     } catch(e) { logs.push({ name, msg: '連線錯誤：' + e.message }); }
   }
@@ -878,6 +901,25 @@ function recordEmailOpen(u){
   }
 }
 
+function recordPreNoticeEmailOpen(u){
+  const l=LockService.getScriptLock();
+  if(l.tryLock(10000)){
+    try{
+      const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      const d=s.getDataRange().getValues();
+      const tu=String(u).trim();
+      const n=new Date();
+      for(let i=1;i<d.length;i++){
+        if(String(d[i][0]).trim()===tu){
+          // col 17 = Q = 行前通知信已讀時間 (1-indexed)
+          if(d[i][16]===""||d[i][16]===null||d[i][16]===undefined){ s.getRange(i+1,17).setValue(n); }
+          break;
+        }
+      }
+    }catch(e){}finally{l.releaseLock();}
+  }
+}
+
 // ==========================================
 // 7. 系統初始化與選單 (Init)
 // ==========================================
@@ -887,13 +929,15 @@ function initCandidatesSheet() {
   
   let s = ss.getSheetByName(SHEET_NAME);
   if (!s) s = ss.insertSheet(SHEET_NAME);
-  const h = [["uuid","姓名","科別","Email","梯次","狀態","意願","飲食","備註","填寫時間","已讀時間","電話","單位","職稱","簡訊狀態"]];
+  const h = [["uuid","姓名","科別","Email","梯次","狀態","意願","飲食","備註","填寫時間","已讀時間","電話","單位","職稱","簡訊狀態","行前通知信狀態","行前通知信已讀時間","行前通知簡訊狀態"]];
   if(s.getLastRow() === 0) {
-      s.getRange(1, 1, 1, 15).setValues(h).setFontWeight("bold").setBackground("#4c4c4c").setFontColor("white");
+      s.getRange(1, 1, 1, 18).setValues(h).setFontWeight("bold").setBackground("#4c4c4c").setFontColor("white");
       s.setFrozenRows(1);
       s.getRange("L:L").setNumberFormat("@");
       s.getRange("J:K").setNumberFormat("yyyy/MM/dd HH:mm:ss");
       s.getRange("O:O").setNumberFormat("MM/dd HH:mm");
+      s.getRange("Q:Q").setNumberFormat("yyyy/MM/dd HH:mm:ss");
+      s.getRange("R:R").setNumberFormat("MM/dd HH:mm");
   }
 
   let s2 = ss.getSheetByName(SETTINGS_SHEET_NAME);

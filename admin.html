@@ -288,7 +288,8 @@
             <th>科別</th>
             <th>基本資料</th>
             <th>聯絡資訊</th>
-            <th>狀態</th>
+            <th>邀請狀態</th>
+            <th>行前通知</th>
             <th>回覆</th>
             <th>操作</th>
           </tr>
@@ -998,6 +999,19 @@ function reloadData() {
         if (row.smsStatus) smsBadge = `<div class="mt-1"><span class="badge bg-info text-dark" title="${row.smsStatus}"><i class="fa-solid fa-comment-sms me-1"></i>簡訊已寄</span></div>`;
         const finalStatus = `<div>${emailStatus}${smsBadge}</div>`;
 
+        // ── 行前通知狀態 ──
+        let pnEmailBadge = `<span class="badge bg-light text-secondary border" style="font-size:0.7rem">-</span>`;
+        if (row.preNoticeStatus === "已發送") {
+          if (row.preNoticeReadTime) {
+            pnEmailBadge = `<span class="badge bg-warning text-dark" style="font-size:0.7rem"><i class="fa-regular fa-eye me-1"></i>信件已讀</span><br><small class="text-muted" style="font-size:0.65rem">${row.preNoticeReadTime}</small>`;
+          } else {
+            pnEmailBadge = `<span class="badge bg-primary" style="font-size:0.7rem"><i class="fa-regular fa-envelope me-1"></i>信件已寄</span>`;
+          }
+        }
+        let pnSmsBadge = "";
+        if (row.preNoticeSmsStatus) pnSmsBadge = `<div class="mt-1"><span class="badge bg-info text-dark" style="font-size:0.7rem" title="${row.preNoticeSmsStatus}"><i class="fa-solid fa-comment-sms me-1"></i>簡訊已寄</span></div>`;
+        const preNoticeHtml = `<div>${pnEmailBadge}${pnSmsBadge}</div>`;
+
         let badgeHtml = `<span class="text-muted">-</span>`;
         if (row.willingness === "yes") badgeHtml = `<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>同意</span>`;
         else if (row.willingness === "no") badgeHtml = `<span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>婉拒</span>`;
@@ -1028,13 +1042,13 @@ function reloadData() {
             <td class="cell-subject"><span class="badge bg-light text-dark border">${row.subject}</span></td>
             <td class="cell-info">${infoHtml}</td>
             <td class="cell-contact"><div class="d-flex flex-column"><span><i class="fa-regular fa-envelope me-2 text-muted"></i>${row.email}</span><span><i class="fa-solid fa-mobile-screen me-2 text-muted"></i>${row.phone||'--'}</span></div></td>
-            <td>${finalStatus}</td><td>${replyStatus}</td><td>${btnHtml}</td></tr>`;
+            <td>${finalStatus}</td><td>${preNoticeHtml}</td><td>${replyStatus}</td><td>${btnHtml}</td></tr>`;
         tbody.append(tr);
       });
 
       dataTable = $('#adminTable').DataTable({
         "language": { "url": "//cdn.datatables.net/plug-ins/1.13.4/i18n/zh-HANT.json" },
-        "order": [[ 6, "desc" ], [ 5, "desc" ]],
+        "order": [[ 7, "desc" ], [ 5, "desc" ]],
         "autoWidth": false,
         "pageLength": 100,
         "lengthMenu": [[25, 50, 100, -1],[25, 50, 100, "全部"]],
