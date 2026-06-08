@@ -1314,7 +1314,7 @@ function exportSmsExcel() {
     const filtered = _clickStatsAll.filter(r => {
       if (q && !r.name.includes(q) && !r.subject.includes(q)) return false;
       if (batch && String(r.batch) !== batch) return false;
-      if (type === 'clicked' && (r.inviteClicks + r.preNoticeClicks) === 0) return false;
+      if (type === 'clicked' && (r.inviteClicks + r.preNoticeClicks + (r.preNoticeGroupClicks || 0)) === 0) return false;
       return true;
     });
     renderClickStats(filtered);
@@ -1329,12 +1329,22 @@ function exportSmsExcel() {
       ? `<span class="badge bg-success rounded-pill">${n}</span>`
       : `<span class="text-muted">—</span>`;
 
+    // 行前通知欄：優先顯示個人標記點擊；若為0但有群組資料，顯示灰色「~N(群組)」
+    const preNoticeBadge = r => {
+      if (r.preNoticeClicks > 0)
+        return `<span class="badge bg-success rounded-pill">${r.preNoticeClicks}</span>`;
+      const g = r.preNoticeGroupClicks || 0;
+      if (g > 0)
+        return `<span class="badge bg-secondary rounded-pill" title="舊批次未標記，為科別梯次群組總計（非個人）">~${g}</span>`;
+      return `<span class="text-muted">—</span>`;
+    };
+
     const tbody = document.getElementById('clickStatsTbody');
     if (list.length === 0) {
       tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">無資料</td></tr>';
     } else {
       tbody.innerHTML = list.map((r, i) => {
-        const total = r.inviteClicks + r.preNoticeClicks;
+        const total = r.inviteClicks + r.preNoticeClicks + (r.preNoticeGroupClicks || 0);
         return `<tr>
           <td class="text-muted">${i + 1}</td>
           <td class="fw-semibold">${r.name}</td>
@@ -1342,7 +1352,7 @@ function exportSmsExcel() {
           <td>${batchLabel(r.batch)}</td>
           <td>${wilLabel(r.willingness)}</td>
           <td class="text-center">${clickBadge(r.inviteClicks)}</td>
-          <td class="text-center">${clickBadge(r.preNoticeClicks)}</td>
+          <td class="text-center">${preNoticeBadge(r)}</td>
           <td class="text-center fw-bold">${total > 0 ? total : '<span class="text-muted">—</span>'}</td>
         </tr>`;
       }).join('');

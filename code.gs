@@ -1,0 +1,1251 @@
+/* Code.gs - 教甄委員管理系統 (完整整合版) */
+
+// ★★★ 請替換為您的 Web App 網址 (部署後取得) ★★★
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwPaKHUAIE2yUB8kEijIKFYHcEaRl2ts0X2a9efGyZSAo2IsomLWJXkYRvPU_2GIM_B/exec";
+const FRONTEND_URL = "http://exam.skes.tc.edu.tw";
+const SHEET_NAME = "Candidates";
+const SETTINGS_SHEET_NAME = "Settings";
+
+// ==========================================
+// 1. API 路由設定 (doGet / doPost)
+// ==========================================
+
+// ==========================================
+// 處理 GET 請求 (前端讀取資料、信件追蹤、短代碼解析 API)
+// ==========================================
+function doGet(e) {
+  const p = e.parameter;
+
+  // 1. 攔截信件已讀追蹤 (Tracking Pixel)
+  if (p.track && p.uid) {
+    try {
+      recordEmailOpen(p.uid);
+    } catch(err) {}
+    const d = Utilities.base64Decode("R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==");
+    return ContentService.createTextOutput("").append(d).setMimeType(ContentService.MimeType.PNG);
+  }
+
+  // 2. 處理所有的 API 資料請求
+  const action = p.action;
+  let data;
+
+  try {
+    if (action === 'getAdminData') {
+      data = getAdminData();
+    } else if (action === 'getSettingsData') {
+      data = getSettingsData();
+    } else if (action === 'getCandidateInfo') {
+      data = getCandidateInfo(p.uid);
+    } else if (action === 'getSmsConfig') {
+      data = getSmsConfig();
+    } else if (action === 'getClickStats') {
+      data = getClickStats();
+    } else if (action === 'resolveShortCode') {
+      // 處理前端丟過來的短代碼解析請求
+      data = resolveShortCode(p.s);
+    } else if (action === 'getDashboardData') {
+      data = getDashboardData();
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 GET 請求' }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // 成功時，統一回傳 JSON 格式
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', data: data }))
+                         .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    // 發生錯誤時，回傳錯誤訊息的 JSON
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// 處理 POST 請求 (前端寫入/修改/刪除/寄信/發簡訊)
+function doPost(e) {
+  if (!e.postData || !e.postData.contents) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '缺少 Payload' })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var requestBody = JSON.parse(e.postData.contents);
+  var action = requestBody.action;
+  var payload = requestBody.data;
+  var responseData = {};
+
+  try {
+    if (action === 'adminAddCandidate') { responseData = adminAddCandidate(payload); }
+    else if (action === 'adminEditCandidate') { responseData = adminEditCandidate(payload); }
+    else if (action === 'adminBatchImport') { responseData = adminBatchImport(payload); }
+    else if (action === 'adminDeleteCandidates') { responseData = adminDeleteCandidates(payload); }
+    else if (action === 'adminResendEmails') { responseData = adminResendEmails(payload); }
+    else if (action === 'saveSmsConfig') { responseData = saveSmsConfig(payload.account, payload.password); }
+    else if (action === 'adminSendSMS') { responseData = adminSendSMS(payload.ids, payload.template); }
+    else if (action === 'adminSendPreNotice') { responseData = adminSendPreNotice(payload); }
+    else if (action === 'adminSendPreNoticeSMS') { responseData = adminSendPreNoticeSMS(payload.ids, payload.template); }
+    else if (action === 'saveSettingsData') { responseData = saveSettingsData(payload); }
+    else if (action === 'submitForm') { responseData = submitForm(payload); }
+    else if (action === 'verifyLogin') { responseData = verifyLogin(payload.username, payload.password); }
+    else if (action === 'adminExportSmsData') { responseData = adminExportSmsData(payload.ids); }
+    else if (action === 'adminExportPreNoticeSmsData') { responseData = adminExportPreNoticeSmsData(payload.ids); }
+    else if (action === 'exportCheckInBook') { responseData = exportCheckInBook(payload.ids); }
+    else {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效的 POST 請求' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var finalResponse = responseData.status || responseData.result ? responseData : { status: 'success', data: responseData };
+    return ContentService.createTextOutput(JSON.stringify(finalResponse))
+                         .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+
+// ==========================================
+// 匯出 EVERY8D 簡訊批次檔 (並更新聯絡狀態)
+// ==========================================
+function adminExportSmsData(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  
+  const sheetHeaders = data[0];
+  const statusColIndex = sheetHeaders.indexOf("聯絡狀態");
+  
+  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一", "參數二", "參數三", "參數四", "參數五"];
+  let exportData = [headers];
+  
+  for (let i = 1; i < data.length; i++) {
+    if (!ids.includes(data[i][0])) continue;
+    
+    const row = data[i];
+    const name = row[1] || "";
+    const phoneRaw = row[11];
+    const phone = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, "") : "";
+    //const email = row[3] || "";
+    const email = "";
+    const title = row[13] || "";
+    const date = "";
+    const longLink = FRONTEND_URL + "?uid=" + row[0];
+    let shortLink = createShortUrl(longLink); 
+    
+    const p1 = name;
+    const p2 = title;
+    
+    // ★ 關鍵修改：利用 replace 將開頭的 http:// 或 https:// 替換為空字串
+    const p3 = shortLink.replace(/^http?:\/\//i, ''); 
+    
+    const p4 = "";
+    const p5 = "";
+    exportData.push([name, phone, email, date, p1, p2, p3, p4, p5]);
+    
+    // 更新狀態為「批次簡訊」
+    if (statusColIndex !== -1) {
+      sheet.getRange(i + 1, statusColIndex + 1).setValue("批次簡訊");
+    }
+    
+    // (保留功能) 寫入當前時間至第 15 欄 (簡訊狀態)
+    sheet.getRange(i + 1, 15).setValue(new Date());
+  }
+  
+  return { status: 'success', excelData: exportData };
+}
+// ── 行前通知簡訊批次檔 (EVERY8D 格式，只含已同意委員) ──
+//    參數配置：p1=姓名, p2=考場, p3=科別, p4=雲端連結(依內/外聘自動選), p5=飲食
+function adminExportPreNoticeSmsData(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
+
+  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(雲端連結)", "參數五(飲食)"];
+  let exportData = [headers];
+
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1] || '';
+    const subject     = data[i][2] || '';
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
+    const phoneRaw    = data[i][11];
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+
+    const phone          = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
+    const venue          = getVenueBySubject(subject, venueMap);
+    const cloudLinkRaw   = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
+    // 批次檔雲端連結轉短網址（去除 https:// 前綴，符合簡訊格式）
+    const cloudLink = cloudLinkRaw
+      ? createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '')  // 帶入 uid 標記
+      : '';
+
+    exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
+  }
+
+  return { status: 'success', excelData: exportData };
+}
+
+// ==========================================
+// 2. 系統設定與範本存取 (Settings)
+// ==========================================
+
+function getSettingsData() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET_NAME);
+  if (!sheet) return {};
+  
+  const data = sheet.getDataRange().getValues();
+  let settings = {};
+  for (let i = 1; i < data.length; i++) {
+    const key = data[i][0];
+    const val = data[i][1];
+    if (key) settings[key] = val;
+  }
+  return settings;
+}
+
+function saveSettingsData(formObj) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SETTINGS_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(SETTINGS_SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const updates = {
+    'TEMPLATE_EMAIL_INVITE':    formObj.tpl_email_invite,
+    'TEMPLATE_SMS':             formObj.tpl_sms,
+    'TEMPLATE_EMAIL_CONFIRM_YES': formObj.tpl_confirm_yes,
+    'TEMPLATE_EMAIL_CONFIRM_NO':  formObj.tpl_confirm_no,
+    'TEMPLATE_EMAIL_PRENOTICE': formObj.tpl_prenotice_email,
+    'TEMPLATE_SMS_PRENOTICE':   formObj.tpl_prenotice_sms
+  };
+  
+  for (let i = 1; i < data.length; i++) {
+    const key = data[i][0];
+    if (updates.hasOwnProperty(key)) {
+      sheet.getRange(i + 1, 2).setValue(updates[key]);
+      delete updates[key];
+    }
+  }
+  
+  const lastRow = sheet.getLastRow();
+  let newRow = lastRow + 1;
+  for (const [key, value] of Object.entries(updates)) {
+    sheet.getRange(newRow, 1).setValue(key);
+    sheet.getRange(newRow, 2).setValue(value);
+    newRow++;
+  }
+  return { status: 'success' };
+}
+
+function getSettingValue(key) {
+  const settings = getSettingsData();
+  return settings[key] || "";
+}
+
+function saveSmsConfig(a, p) { 
+  const props = PropertiesService.getScriptProperties(); 
+  props.setProperty('SMS_ACCOUNT', a); 
+  props.setProperty('SMS_PASSWORD', p); 
+  return {status:'success'};
+}
+
+function getSmsConfig() { 
+  const props = PropertiesService.getScriptProperties(); 
+  return { 
+    account: props.getProperty('SMS_ACCOUNT')||"", 
+    hasPassword: !!props.getProperty('SMS_PASSWORD') 
+  };
+}
+
+// ==========================================
+// 3. 資料讀取 API (Dashboard)
+// ==========================================
+
+function getAdminData(timestamp) {
+  SpreadsheetApp.flush();
+  const currentSS = SpreadsheetApp.getActiveSpreadsheet();
+  const freshSS = SpreadsheetApp.openById(currentSS.getId());
+  const sheet = freshSS.getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  
+  const smsTemplate = getSettingValue('TEMPLATE_SMS') || "{{姓名}} 老師您好，誠邀您擔任教甄委員。回覆連結： {{連結}}";
+  const timeZone = Session.getScriptTimeZone();
+  const fmtTime = (d) => {
+    if (!d || !(d instanceof Date)) return "";
+    try { return Utilities.formatDate(d, timeZone, "MM/dd HH:mm:ss"); } catch (e) { return ""; }
+  };
+  
+  let stats = { total: 0, sent: 0, read: 0, agree: 0, reject: 0, pending: 0 };
+  let list = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    stats.total++;
+    const batch = data[i][4] || "1"; 
+    const status = data[i][5];
+    const willingness = data[i][6];
+    const diet = data[i][7] || ""; 
+    const note = data[i][8];
+    const readTime = data[i][10];
+    const phone = data[i][11];
+    const unit = data[i][12] || ""; 
+    const title = data[i][13] || "";
+    const smsStatus = data[i][14];
+
+    if (status === "已發送") stats.sent++;
+    if (readTime) stats.read++;
+    if (willingness === "yes") stats.agree++;
+    else if (willingness === "no") stats.reject++;
+    else stats.pending++;
+
+    list.push({
+      uid: data[i][0],
+      name: data[i][1],
+      subject: data[i][2],
+      email: data[i][3],
+      batch: batch, 
+      phone: phone, 
+      unit: unit,
+      title: title,
+      status: status,
+      smsStatus: smsStatus ? fmtTime(smsStatus) : "",
+      willingness: willingness,
+      diet: diet,
+      note: note,
+      readTime: fmtTime(readTime),
+      replyTime: fmtTime(data[i][9])
+    });
+  }
+  return { stats: stats, list: list, smsTemplate: smsTemplate, appUrl: WEB_APP_URL };
+}
+
+// ==========================================
+// 4. CRUD (新增/修改/刪除/匯入)
+// ==========================================
+
+function adminAddCandidate(f){
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(10000); } catch(e) { return {status:'error'}; }
+  
+  const s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const nr = s.getLastRow() + 1;
+  s.getRange(nr, 12).setNumberFormat("@"); // 設定電話欄位為純文字
+  
+  // ★ 修正：精準對應試算表的 15 個欄位
+  const d = [
+    Utilities.getUuid(),           // 1. uuid
+    f.name,                        // 2. 姓名
+    f.subject,                     // 3. 科別
+    f.email,                       // 4. Email
+    f.batch || "1",                // 5. 梯次
+    "未發送",                      // 6. 狀態
+    f.willingness || "",           // 7. 意願
+    f.diet || "",                  // 8. 飲食
+    f.note || "",                  // 9. 備註
+    "",                            // 10. 填寫時間 (回覆時間)
+    "",                            // 11. 已讀時間
+    String(f.phone || "").trim(),  // 12. 電話
+    f.unit || "",                  // 13. 單位
+    f.title || "",                 // 14. 職稱
+    ""                             // 15. 簡訊狀態
+  ];
+  
+  // 將 15 個欄位的陣列寫入試算表
+  s.getRange(nr, 1, 1, 15).setValues([d]);
+  SpreadsheetApp.flush();
+  lock.releaseLock();
+  
+  return {status:'success'};
+}
+
+function adminEditCandidate(f){
+  const lock=LockService.getScriptLock();try{lock.waitLock(10000);}catch(e){return{status:'error'};}
+  const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data=s.getDataRange().getValues();
+  let ok=false;
+  
+  for(let i=1;i<data.length;i++){
+    if(String(data[i][0])==String(f.uid)){
+      const r=i+1;
+      s.getRange(r,2).setValue(f.name);
+      s.getRange(r,3).setValue(f.subject);
+      s.getRange(r,4).setValue(f.email);
+      s.getRange(r,5).setValue(f.batch||"1");
+      
+      s.getRange(r,12).setNumberFormat("@").setValue(String(f.phone));
+      s.getRange(r,13).setValue(f.unit||"");
+      s.getRange(r,14).setValue(f.title||"");
+      s.getRange(r,8).setValue(f.diet||"");
+      
+      s.getRange(r, 7).setValue(f.willingness);
+      if (f.willingness) {
+        s.getRange(r, 6).setValue("已回覆");
+        s.getRange(r, 10).setValue(new Date());
+      } else {
+        s.getRange(r, 10).clearContent();
+        const currentStatus = s.getRange(r, 6).getValue();
+        if (currentStatus === "已回覆") {
+          s.getRange(r, 6).setValue("已發送");
+        }
+      }
+      
+      s.getRange(r,9).setValue(f.note||"");
+      SpreadsheetApp.flush();Utilities.sleep(500);ok=true;break;
+    }
+  }
+  lock.releaseLock();
+  return ok?{status:'success'}:{status:'error'};
+}
+
+function adminBatchImport(L) {
+  const s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const n = [];
+  if (!L || L.length === 0) return { status: 'error' };
+  
+  for (let i = 0; i < L.length; i++) {
+    let m = L[i];
+    if (m.name) {
+      n.push([
+        Utilities.getUuid(),   // 1. UUID
+        m.name,                // 2. 姓名
+        m.subject,             // 3. 科別
+        m.email,               // 4. Email
+        m.batch || "1",        // 5. 梯次
+        "未發送",              // 6. 狀態
+        "",                    // 7. 意願
+        "",                    // 8. 飲食
+        "",                    // 9. 備註
+        "",                    // 10. 回覆時間
+        "",                    // 11. 已讀時間
+        String(m.phone || ""), // 12. 電話
+        m.unit || "",          // 13. 單位
+        m.title || "",         // 14. 職稱
+        ""                     // 15. 簡訊狀態
+      ]);
+    }
+  }
+  
+  if (n.length > 0) {
+    const r = s.getLastRow() + 1;
+    s.getRange(r, 12, n.length, 1).setNumberFormat("@"); 
+    s.getRange(r, 1, n.length, 15).setValues(n);
+    SpreadsheetApp.flush();
+    return { status: 'success', count: n.length };
+  }
+  return { status: 'error' };
+}
+
+function adminDeleteCandidates(ids){
+  const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const d=s.getDataRange().getValues();
+  for(let i=d.length-1;i>=1;i--){
+    if(ids.includes(d[i][0]))s.deleteRow(i+1);
+  }
+  SpreadsheetApp.flush();
+  return{status:'success'};
+}
+
+function getCandidateInfo(u){
+  const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const d=s.getDataRange().getValues();
+  const t=String(u).trim();
+  for(let i=1;i<d.length;i++){
+    if(String(d[i][0]).trim()==t){
+      if(d[i][6]!=="")return{status:"responded",name:d[i][1]};
+      return{status:"success",name:d[i][1],subject:d[i][2],uid:t};
+    }
+  }
+  return{status:"not_found"};
+}
+
+// ==========================================
+// 5. 溝通功能 (Email & SMS)
+// ==========================================
+
+function adminResendEmails(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  let count = 0;
+  let templateStr = getSettingValue('TEMPLATE_EMAIL_INVITE');
+  
+  if (!templateStr) {
+    templateStr = '<p><strong>{{name}}</strong> {{title}} 您好：<br>誠摯邀請您擔任本年度教師甄試委員。<br><a href="{{link}}">點此回覆意願</a></p>';
+  }
+
+  for (let i = 1; i < data.length; i++) {
+    if (ids.includes(data[i][0]) && data[i][3]) { 
+      try {
+        const uuid = data[i][0];
+        const name = data[i][1];
+        const email = data[i][3];
+        const subjectCategory = data[i][2];
+        const title = data[i][13];
+        const longLink = FRONTEND_URL + "?uid=" + uuid;
+        //const shortLink = getShortUrl(longLink); 
+        const shortLink = createShortUrl(longLink); // 改用自建的縮網址
+
+        let body = templateStr
+          .replace(/{{name}}/g, name)
+          .replace(/{{subjectCategory}}/g, subjectCategory)
+          .replace(/{{link}}/g, shortLink)
+          .replace(/{{title}}/g, title)
+          .replace(/<\?= name \?>/g, name)
+          .replace(/<\?= link \?>/g, shortLink)
+          .replace(/<\?= title \?>/g, title);
+
+        const tLink = WEB_APP_URL + "?track=true&uid=" + uuid;
+        const img = `<img src="${tLink}" width="1" height="1" style="display:none;"/>`;
+        
+        GmailApp.sendEmail(email, "【誠摯邀請】國小教師甄試委員聘任徵詢 - " + name + title, "", {htmlBody: body + img, name: "教甄委員會"});
+        sheet.getRange(i + 1, 6).setValue("已發送"); 
+        count++;
+      } catch (e) { console.error(e); }
+    }
+  }
+  SpreadsheetApp.flush();
+  return { status: 'success', count: count };
+}
+
+function adminSendSMS(ids, template) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+
+  const props = PropertiesService.getScriptProperties();
+  const SMS_USER = props.getProperty('SMS_ACCOUNT');
+  const SMS_PASSWORD = props.getProperty('SMS_PASSWORD');
+  
+  if (!SMS_USER || !SMS_PASSWORD) {
+    return { status: 'error', message: '尚未設定簡訊帳號密碼' };
+  }
+
+  let logs = [];
+  let successCount = 0;
+  
+  for (let i = 1; i < data.length; i++) {
+    if (!ids.includes(data[i][0])) continue;
+    const name     = data[i][1];
+    const phoneRaw = data[i][11];
+    const title    = data[i][13];
+    
+    if (!phoneRaw || String(phoneRaw).trim() === "") {
+      logs.push({ name: name, phone: "無", msg: "無電話號碼，略過" });
+      continue;
+    }
+
+    // 格式化電話號碼 (移除空白與橫線)
+    const phone = String(phoneRaw).replace(/[-\s]/g, "");
+    const longLink = FRONTEND_URL + "?uid=" + data[i][0];
+    const link = createShortUrl(longLink, data[i][0]); // 帶入 uid 標記
+    const smsLink = link.replace(/^https?:\/\//i, '');
+    // 替換簡訊內容變數
+    const msgContent = template
+      .replace(/{{姓名}}/g, name)
+      .replace(/{{連結}}/g, smsLink)
+      .replace(/{{職稱}}/g, title);
+      
+    // 準備傳送給 API 的參數 (不用 JSON.stringify，維持物件即可，GAS 會自動轉成 Form Data)
+const payload = {
+      "UID": SMS_USER,
+      "PWD": SMS_PASSWORD,
+      "SB": "",
+      "MSG": msgContent,
+      "DEST": phone,
+      "ST": "",
+      "RETRYTIME": "1440"
+    };
+    
+    const options = {
+      "method": "post",
+      // 改為規格書要求的 x-www-form-urlencoded (或者可以直接省略，GAS 預設就是這個)
+      "contentType": "application/x-www-form-urlencoded", 
+      "payload": payload,
+      "muteHttpExceptions": true
+      // 刪除所有偽裝的 headers 區塊
+    };
+    
+    try {
+      // ★ 修正點：替換為 EVERY8D 官方專用的 API 網域 (api.every8d.com)
+      const response = UrlFetchApp.fetch("https://new.e8d.tw/API21/HTTP/sendSMS.ashx", options);
+      const resultText = response.getContentText().trim();
+      
+      // 解析 EVERY8D 回傳的 CSV 格式 (例如: 100.0,1,1,0,3298...)
+      const parts = resultText.split(",");
+      const firstValue = parseFloat(parts[0]);
+      
+      if (!isNaN(firstValue) && firstValue < 0) {
+        // 如果第一個值是負數，代表帳密錯誤或格式錯誤
+        logs.push({ name: name, phone: phone, msg: "失敗 (代碼:" + parts[0] + " / " + parts.slice(1).join(",") + ")" });
+      } else {
+        const unsend = parseInt(parts[3]);
+        const credit = parseFloat(parts[0]);
+        if (unsend > 0 && credit === 0) {
+          logs.push({ name: name, phone: phone, msg: "警告：點數不足 (BatchID:" + parts[4] + ")" });
+        } else {
+          logs.push({ name: name, phone: phone, msg: "成功 (餘額:" + parts[0] + " 扣點:" + parts[2] + ")" });
+          successCount++;
+          // 寫入簡訊發送時間到試算表
+          sheet.getRange(i + 1, 15).setValue(new Date());
+        }
+      }
+    } catch (e) {
+      logs.push({ name: name, phone: phone, msg: "連線錯誤：" + e.message });
+    }
+  }
+
+  return { status: 'success', count: successCount, logs: logs };
+}
+
+// ── 從 Dashboard 分頁建立「科別 → { venue, linkNei, linkWai }」對應表 ──
+//    欄位說明：考場、內聘雲端連結、外聘雲端連結
+function buildVenueMap() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dashboard');
+  if (!sheet) return {};
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return {};
+  const headers    = data[0].map(h => String(h).trim());
+  const subjectIdx = headers.indexOf('科別');
+  const venueIdx   = headers.indexOf('考場');
+  const linkNeiIdx = headers.indexOf('內聘雲端連結');  // 可不存在
+  const linkWaiIdx = headers.indexOf('外聘雲端連結');  // 可不存在
+  if (subjectIdx === -1 || venueIdx === -1) return {};
+  const map = {};
+  for (let i = 1; i < data.length; i++) {
+    const s = String(data[i][subjectIdx]).trim();
+    if (!s) continue;
+    map[s] = {
+      venue:   String(data[i][venueIdx]).trim(),
+      linkNei: linkNeiIdx !== -1 ? String(data[i][linkNeiIdx]).trim() : '',
+      linkWai: linkWaiIdx !== -1 ? String(data[i][linkWaiIdx]).trim() : ''
+    };
+  }
+  return map;
+}
+
+// ── 內部共用：依科別找到對應的 entry（完全比對 → 部分比對） ──
+function _lookupVenueEntry(subject, venueMap) {
+  if (venueMap[subject]) return venueMap[subject];
+  for (const key of Object.keys(venueMap)) {
+    if (subject.includes(key) || key.includes(subject)) return venueMap[key];
+  }
+  return null;
+}
+
+// ── 科別 → 考場名稱 ──
+function getVenueBySubject(subject, venueMap) {
+  if (!venueMap) venueMap = buildVenueMap();
+  const entry = _lookupVenueEntry(subject, venueMap);
+  return entry ? (entry.venue || '（請確認考場）') : '（請確認考場）';
+}
+
+// ── 科別 + 梯次(batch) → 雲端連結 ──
+//    batch=1 → 內聘連結；batch=2 → 外聘連結
+function getCloudLinkBySubject(subject, batch, venueMap) {
+  if (!venueMap) venueMap = buildVenueMap();
+  const entry = _lookupVenueEntry(subject, venueMap);
+  if (!entry) return '';
+  return String(batch) === '2' ? (entry.linkWai || '') : (entry.linkNei || '');
+}
+
+// ── 自動將文字中所有 http(s) 網址轉成短網址 ──
+function shortenUrlsInText(text) {
+  if (!text) return text;
+
+  // 粗比對：先找所有 http(s) 開頭的字串（允許 href=" 與純文字兩種情境）
+  const raw = text.match(/https?:\/\/\S+/g) || [];
+
+  // 清理尾端不屬於網址的字元（HTML 屬性引號、標點等）
+  const cleanUrl = u => u.replace(/['"<>）\]）。，！？\.;:]+$/, '');
+
+  const unique = [...new Set(raw.map(cleanUrl).filter(Boolean))];
+  if (unique.length === 0) return text;   // 沒有網址，直接返回
+
+  const cache = {};
+  unique.forEach(url => {
+    // 跳過追蹤像素
+    if (url.includes('?track=') || url.includes('&track=')) return;
+    // 跳過已經是我們系統的短網址
+    if (url.startsWith(FRONTEND_URL + '/') && /\/[A-Za-z0-9]{6}$/.test(url)) return;
+
+    try {
+      const short = createShortUrl(url);
+      cache[url] = short;
+      Logger.log('[shortenUrls] ' + url + ' → ' + short);
+    } catch(e) {
+      Logger.log('[shortenUrls] FAILED ' + url + ' : ' + e.message);
+    }
+  });
+
+  // 把每個長網址替換成短網址（使用字串 split/join 避免 regex 特殊字元問題）
+  Object.entries(cache).forEach(([long, short]) => {
+    text = text.split(long).join(short);
+  });
+
+  return text;
+}
+
+// ── 測試函式：可在 GAS 編輯器直接執行，查看 Logger 輸出 ──
+function testShortenUrls() {
+  const sample = '請點此連結確認出席：https://forms.gle/testABC123 謝謝。';
+  Logger.log('原文：' + sample);
+  const result = shortenUrlsInText(sample);
+  Logger.log('結果：' + result);
+  Logger.log(result === sample ? '❌ 未縮短（請確認 UrlShortener 分頁存在）' : '✅ 縮短成功');
+}
+
+// ── 行前通知：Email ──
+function adminSendPreNotice(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  let templateStr = getSettingValue('TEMPLATE_EMAIL_PRENOTICE');
+  if (!templateStr) templateStr = '<p><strong>{{name}}</strong> {{title}} 您好，<br>感謝您確認參與本次教師甄試委員工作，敬請留意後續行前通知事項。</p>';
+
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
+  let count = 0;
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1];
+    const subject     = data[i][2];
+    const email       = data[i][3];
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+    const unit        = data[i][12] || '';
+    const title       = data[i][13] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+    if (!email) continue;
+
+    try {
+      const venue     = getVenueBySubject(subject, venueMap);
+      const cloudLink = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
+      let body = templateStr
+        .replace(/{{name}}/g, name)
+        .replace(/{{title}}/g, title)
+        .replace(/{{subject}}/g, subject)
+        .replace(/{{unit}}/g, unit)
+        .replace(/{{diet}}/g, diet)
+        .replace(/{{venue}}/g, venue)
+        .replace(/{{雲端連結}}/g, cloudLink);
+      GmailApp.sendEmail(email, "【行前通知】教師甄試委員注意事項", "", { htmlBody: body, name: "教甄委員會" });
+      count++;
+    } catch(e) { console.error('PreNotice email error:', e); }
+  }
+  SpreadsheetApp.flush();
+  return { status: 'success', count: count };
+}
+
+// ── 行前通知：簡訊 ──
+function adminSendPreNoticeSMS(ids, template) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const props = PropertiesService.getScriptProperties();
+  const SMS_USER = props.getProperty('SMS_ACCOUNT');
+  const SMS_PASSWORD = props.getProperty('SMS_PASSWORD');
+  if (!SMS_USER || !SMS_PASSWORD) return { status: 'error', message: '尚未設定簡訊帳號密碼' };
+
+  const venueMap = buildVenueMap();   // 只讀一次 Dashboard
+  let logs = [], successCount = 0;
+  for (let i = 1; i < data.length; i++) {
+    const uid         = data[i][0];
+    const name        = data[i][1];
+    const subject     = data[i][2];
+    const batch       = data[i][4] || '1';   // 1=內聘, 2=外聘
+    const phone       = data[i][11];
+    const willingness = data[i][6];
+    const diet        = data[i][7] || '';
+    const unit        = data[i][12] || '';
+    const title       = data[i][13] || '';
+
+    if (!ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+    if (!phone) continue;
+
+    const venue        = getVenueBySubject(subject, venueMap);
+    const cloudLinkRaw = getCloudLinkBySubject(subject, batch, venueMap);
+    // 預先建立有 uid 標記的短網址，讓 shortenUrlsInText 不會重複縮它
+    const cloudShort = cloudLinkRaw
+      ? createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '')
+      : '';
+    const msg = shortenUrlsInText(template
+      .replace(/{{姓名}}/g, name)
+      .replace(/{{職稱}}/g, title)
+      .replace(/{{科別}}/g, subject)
+      .replace(/{{單位}}/g, unit)
+      .replace(/{{飲食}}/g, diet)
+      .replace(/{{考場}}/g, venue)
+      .replace(/{{雲端連結}}/g, cloudShort));
+
+    const payload = `UID=${encodeURIComponent(SMS_USER)}&PWD=${encodeURIComponent(SMS_PASSWORD)}&MSG=${encodeURIComponent(msg)}&DEST=${encodeURIComponent(phone)}&ST=&RETRYTIME=&VALIDTIME=&RESPONSE=1`;
+    try {
+      const response = UrlFetchApp.fetch("https://new.e8d.tw/API21/HTTP/sendSMS.ashx", {
+        method: 'post', contentType: 'application/x-www-form-urlencoded', payload, muteHttpExceptions: true
+      });
+      const parts = response.getContentText().trim().split(',');
+      const first = parseFloat(parts[0]);
+      if (!isNaN(first) && first < 0) {
+        logs.push({ name, msg: '失敗 (代碼:' + parts[0] + ')' });
+      } else {
+        logs.push({ name, msg: '成功 (餘額:' + parts[0] + ')' });
+        successCount++;
+      }
+    } catch(e) { logs.push({ name, msg: '連線錯誤：' + e.message }); }
+  }
+  return { status: 'success', count: successCount, logs };
+}
+
+function getShortUrl(l){
+  try{
+    const r=UrlFetchApp.fetch("https://is.gd/create.php?format=simple&url="+encodeURIComponent(l),{muteHttpExceptions:true});
+    if(r.getResponseCode()===200&&r.getContentText().indexOf("http")===0) return r.getContentText();
+  }catch(e){}
+  return l;
+}
+
+// ==========================================
+// 6. 表單提交與確認信 (Frontend Submission)
+// ==========================================
+
+function submitForm(f) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const uid = String(f.uid).trim();
+  let r = -1;
+  let targetRowIndex = -1;
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() == uid) {
+      r = i + 1;
+      targetRowIndex = i; break;
+    }
+  }
+
+  if (r == -1) return { result: "error" };
+
+  sheet.getRange(r, 6).setValue("已回覆");
+  sheet.getRange(r, 7).setValue(f.willingness);
+
+  if (f.willingness === "yes") {
+    sheet.getRange(r, 8).setValue(f.diet);
+    sheet.getRange(r, 9).setValue(f.memo);
+  } else {
+    sheet.getRange(r, 9).setValue(f.rejectReason);
+  }
+  sheet.getRange(r, 10).setValue(new Date());
+  
+  try {
+    const name = data[targetRowIndex][1];
+    const email = data[targetRowIndex][3];
+    const subjectCategory = data[targetRowIndex][2];
+    const title = data[targetRowIndex][13] || "";
+    if (email && email.includes("@")) {
+      const subject = "【教甄委員會】已收到您的意願回覆 - 確認通知";
+      let body = "";
+      if (f.willingness === "yes") {
+        let tpl = getSettingValue('TEMPLATE_EMAIL_CONFIRM_YES');
+        if (!tpl) tpl = "<p>{{name}}  {{title}} 您好：<br>已收到您<strong>願意擔任</strong>的回覆。<br>科別：{{subjectCategory}}<br>飲食：{{diet}}<br>備註：{{memo}}</p>";
+        body = tpl.replace(/{{name}}/g, name).replace(/{{title}}/g, title).replace(/{{subjectCategory}}/g, subjectCategory).replace(/{{diet}}/g, f.diet || '未填寫').replace(/{{memo}}/g, f.memo || '無');
+      } else {
+        let tpl = getSettingValue('TEMPLATE_EMAIL_CONFIRM_NO');
+        if (!tpl) tpl = "<p>{{name}}  {{title}} 您好：<br>已收到您<strong>無法擔任</strong>的回覆。感謝您的支持。</p>";
+        body = tpl.replace(/{{name}}/g, name).replace(/{{title}}/g, title);
+      }
+      GmailApp.sendEmail(email, subject, "", { htmlBody: body, name: "教甄委員會" });
+    }
+  } catch (e) { console.error("確認信失敗: " + e); }
+
+  return { result: "success", name: data[targetRowIndex][1] };
+}
+
+function recordEmailOpen(u){
+  const l=LockService.getScriptLock();
+  if(l.tryLock(10000)){
+    try{
+      const s=SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      const d=s.getDataRange().getValues();
+      const tu=String(u).trim();
+      const n=new Date();
+      for(let i=1;i<d.length;i++){
+        if(String(d[i][0]).trim()===tu){
+          if(d[i][10]===""||d[i][10]===null){ s.getRange(i+1,11).setValue(n); }
+          break;
+        }
+      }
+    }catch(e){}finally{l.releaseLock();}
+  }
+}
+
+// ==========================================
+// 7. 系統初始化與選單 (Init)
+// ==========================================
+
+function initCandidatesSheet() { 
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  let s = ss.getSheetByName(SHEET_NAME);
+  if (!s) s = ss.insertSheet(SHEET_NAME);
+  const h = [["uuid","姓名","科別","Email","梯次","狀態","意願","飲食","備註","填寫時間","已讀時間","電話","單位","職稱","簡訊狀態"]];
+  if(s.getLastRow() === 0) {
+      s.getRange(1, 1, 1, 15).setValues(h).setFontWeight("bold").setBackground("#4c4c4c").setFontColor("white");
+      s.setFrozenRows(1);
+      s.getRange("L:L").setNumberFormat("@");
+      s.getRange("J:K").setNumberFormat("yyyy/MM/dd HH:mm:ss");
+      s.getRange("O:O").setNumberFormat("MM/dd HH:mm");
+  }
+
+  let s2 = ss.getSheetByName(SETTINGS_SHEET_NAME);
+  if (!s2) s2 = ss.insertSheet(SETTINGS_SHEET_NAME);
+  if (s2.getLastRow() === 0) {
+      s2.getRange(1,1,1,3).setValues([["Key", "Value", "Description"]]).setFontWeight("bold");
+      const defaults = [
+          ["TEMPLATE_EMAIL_INVITE", '<div style="font-family: Microsoft JhengHei, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;"> <div style="background-color: #4285f4; color: white; padding: 15px; text-align: center; border-radius: 8px 8px 0 0;"> <h2 style="margin:0;">國小教師甄試委員邀請</h2> </div> <div style="padding: 20px;"> <p><strong>{{name}}</strong> 委員 您好：</p> <p>承蒙您長期對教育界的貢獻，本年度教師甄試委員會，誠摯邀請您擔任甄試委員。</p> <p>敬請撥冗點擊下方連結，回覆您的聘任意願。</p> <div style="text-align: center; margin: 30px 0;"> <a href="{{link}}" style="background-color: #d93025; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">點此回覆意願</a> </div> <p style="font-size: 12px; color: #666;">若按鈕無法點擊：<br><a href="{{link}}">{{link}}</a></p> </div> </div>', "邀請信範本"],
+          ["TEMPLATE_SMS", "{{姓名}} 老師您好，誠邀您擔任教甄委員。回覆連結： {{連結}}", "簡訊範本"],
+          ["TEMPLATE_EMAIL_CONFIRM_YES", '<div style="font-family: Microsoft JhengHei, sans-serif;"> <p><strong>{{name}}</strong> {{title}} 您好：</p> <p>感謝您的回覆，我們已收到您<strong>「願意擔任」</strong>本年度教師甄試委員的通知。</p> <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;"> <ul> <li>飲食：{{diet}}</li> <li>備註：{{memo}}</li> </ul> </div> <p>後續相關時程將盡快與您聯繫。</p> </div>', "確認信-同意"],
+          ["TEMPLATE_EMAIL_CONFIRM_NO", '<div style="font-family: Microsoft JhengHei, sans-serif;"> <p><strong>{{name}}</strong> {{title}} 您好：</p> <p>我們已收到您<strong>「無法擔任」</strong>的回覆。</p> <p>感謝您撥冗回覆，希望未來還有機會能邀請您。</p> </div>', "確認信-婉拒"]
+      ];
+      s2.getRange(2,1,defaults.length,3).setValues(defaults);
+      s2.setColumnWidth(2, 400);
+  }
+  SpreadsheetApp.getUi().alert('資料庫與範本設定初始化完成');
+}
+
+function resetDefaultTemplates() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Settings");
+  if (!sheet) return;
+
+  const tplInvite = `
+<div style="font-family: 'Microsoft JhengHei', sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+  <div style="background-color: #4285f4; padding: 20px; text-align: center;">
+    <h2 style="color: #ffffff; margin: 0; font-size: 20px;">國小教師甄試委員聘任徵詢</h2>
+  </div>
+  <div style="padding: 30px; background-color: #ffffff;">
+    <p style="font-size: 16px; color: #333; line-height: 1.6;"><strong>{{name}}  {{title}} </strong> 您好：</p>
+    <p style="font-size: 15px; color: #555; line-height: 1.6;">
+      承蒙 您長期對教育界的專業貢獻與支持，本年度教師甄試委員會正積極籌備中。<br><br>
+      誠摯邀請 您擔任本屆甄試委員，藉助 您的專業素養為教育界舉才。敬請撥冗點擊下方按鈕，回覆您的聘任意願及飲食習慣。
+    </p>
+    <div style="text-align: center; margin: 35px 0;">
+      <a href="{{link}}" target="_blank" style="background-color: #d93025; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; padding: 12px 30px; border-radius: 4px; display: inline-block; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+        點此回覆意願
+      </a>
+    </div>
+    <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 20px; line-height: 1.5;">
+      ※ 若上方按鈕無法點擊，請複製以下連結至瀏覽器開啟：<br>
+      <a href="{{link}}" target="_blank" style="color: #4285f4; word-break: break-all;">{{link}}</a>
+    </p>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 12px; color: #999;">
+    教甄委員會 敬上<br>
+    (此為系統自動發送信件，請勿直接回覆)
+  </div>
+</div>`;
+
+  const tplSms = `【教甄邀請】{{姓名}} 老師您好，誠邀您擔任本屆甄試委員。詳情與回覆請點： {{連結}}`;
+  
+  const tplConfirmYes = `
+<div style="font-family: 'Microsoft JhengHei', sans-serif; max-width: 600px; margin: 0 auto; border-left: 4px solid #0f9d58; background-color: #f9f9f9; padding: 20px;">
+  <h3 style="color: #0f9d58; margin-top: 0;"> 已收到您的同意回覆</h3>
+  <p style="font-size: 15px; color: #333;"><strong>{{name}} {{title}}</strong> 您好：</p>
+  <p style="font-size: 15px; color: #555;">感謝您的慨允！我們已收到您<strong>「願意擔任」</strong>本年度教師甄試委員的通知。</p>
+  <div style="background-color: #fff; border: 1px solid #ddd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+    <strong style="color: #333;">您的登記資料：</strong>
+    <ul style="color: #555; font-size: 14px; margin-bottom: 0;">
+      <li><strong>飲食習慣：</strong>{{diet}}</li>
+      <li><strong>備註事項：</strong>{{memo}}</li>
+    </ul>
+  </div>
+  <p style="font-size: 14px; color: #666;">後續相關聘書發放及詳細甄試時程，我們將會盡快與您聯繫。</p>
+</div>`;
+
+  const tplConfirmNo = `
+<div style="font-family: 'Microsoft JhengHei', sans-serif; max-width: 600px; margin: 0 auto; border-left: 4px solid #757575; background-color: #f9f9f9; padding: 20px;">
+  <h3 style="color: #555; margin-top: 0;">已收到您的回覆</h3>
+  <p style="font-size: 15px; color: #333;"><strong>{{name}} {{title}}</strong> 您好：</p>
+  <p style="font-size: 15px; color: #555;">我們已收到您<strong>「無法擔任」</strong>本年度教師甄試委員的回覆。</p>
+  <p style="font-size: 15px; color: #555;">感謝您撥冗回覆，也謝謝您長期對教育界的關心與支持，期盼未來還有機會能邀請您參與。</p>
+</div>`;
+
+  const updates = {
+    'TEMPLATE_EMAIL_INVITE': tplInvite,
+    'TEMPLATE_SMS': tplSms,
+    'TEMPLATE_EMAIL_CONFIRM_YES': tplConfirmYes,
+    'TEMPLATE_EMAIL_CONFIRM_NO': tplConfirmNo
+  };
+  
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const key = data[i][0];
+    if (updates.hasOwnProperty(key)) {
+      sheet.getRange(i + 1, 2).setValue(updates[key]);
+    }
+  }
+}
+
+function onOpen(){
+  SpreadsheetApp.getUi().createMenu(' 甄試系統管理')
+    .addItem(' 初始化/修復 資料庫','initCandidatesSheet')
+    .addItem(' 強制更新預設信件範本','resetDefaultTemplates')
+    .addToUi();
+}
+
+// ==========================================
+// 8. 登入驗證功能
+// ==========================================
+function verifyLogin(username, password) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("User");
+
+  if (!sheet) {
+    return { status: 'error', message: '系統找不到 User 分頁，請聯絡管理員。' };
+  }
+
+  const data = sheet.getDataRange().getValues();
+
+  // 假設第一列是標題，從第二列開始比對
+  // 欄位：A=帳號, B=密碼, C=角色 (admin/viewer，預設為 admin)
+  for (let i = 1; i < data.length; i++) {
+    let rowUser = String(data[i][0]).trim();
+    let rowPass = String(data[i][1]).trim();
+    let rowRole = String(data[i][2] || '').trim() || 'admin';
+
+    if (rowUser === username && rowPass === password) {
+      return { status: 'success', message: '登入成功', role: rowRole };
+    }
+  }
+
+  return { status: 'error', message: '帳號或密碼錯誤！' };
+}
+
+// ==========================================
+// 9. Dashboard 看板資料
+// ==========================================
+function getDashboardData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("Dashboard");
+
+  if (!sheet) {
+    return { headers: [], rows: [], error: '找不到 Dashboard 分頁，請先在試算表中建立此工作表。' };
+  }
+
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+
+  if (lastRow < 1 || lastCol < 1) {
+    return { headers: [], rows: [] };
+  }
+
+  const allValues = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = allValues[0].map(h => String(h).trim());   // trim 避免空白造成對應失敗
+  const rows = [];
+
+  for (let i = 1; i < allValues.length; i++) {
+    const row = allValues[i];
+    if (row.every(cell => cell === '' || cell === null || cell === undefined)) continue;
+    rows.push(row.map(cell => (cell === null || cell === undefined) ? '' : String(cell)));
+  }
+
+  return { headers, rows };
+}
+
+// ==========================================
+// 10. 報到紀錄冊匯出
+// ==========================================
+function exportCheckInBook(ids) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const venueMap = buildVenueMap();
+
+  const candidates = [];
+  for (let i = 1; i < data.length; i++) {
+    const uid        = data[i][0];
+    const name       = data[i][1] || '';
+    const subject    = data[i][2] || '';
+    const batch      = String(data[i][4] || '1');
+    const willingness= data[i][6];
+    const diet       = data[i][7] || '';
+    const phone      = data[i][11] || '';
+    const unit       = data[i][12] || '';
+    const title      = data[i][13] || '';
+
+    // ids 有值時只取勾選者；沒有勾選則取全部
+    if (ids && ids.length > 0 && !ids.includes(uid)) continue;
+    if (willingness !== 'yes') continue;
+
+    const venue = getVenueBySubject(subject, venueMap);
+    candidates.push({
+      name, subject, venue,
+      batch:  batch === '2' ? '外聘' : '內聘',
+      unit, title, phone, diet
+    });
+  }
+
+  // 依「考場 → 科別」分組
+  const groupMap = {};
+  for (const c of candidates) {
+    const key = c.venue + '||' + c.subject;
+    if (!groupMap[key]) groupMap[key] = { venue: c.venue, subject: c.subject, list: [] };
+    groupMap[key].list.push(c);
+  }
+
+  // 排序：考場 → 科別 → 梯次（內聘優先）→ 姓名
+  const groups = Object.values(groupMap).sort((a, b) => {
+    if (a.venue !== b.venue) return a.venue.localeCompare(b.venue, 'zh');
+    return a.subject.localeCompare(b.subject, 'zh');
+  });
+
+  for (const g of groups) {
+    g.list.sort((a, b) => {
+      if (a.batch !== b.batch) return a.batch === '內聘' ? -1 : 1;
+      return a.name.localeCompare(b.name, 'zh');
+    });
+    // 補序號
+    g.list = g.list.map((c, idx) => ({ seq: idx + 1, ...c }));
+  }
+
+  return { status: 'success', groups };
+}
+
+// ==========================================
+// 11. 系統自建縮網址功能
+// ==========================================
+function createShortUrl(longUrl, note = '') {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let shortCode = '';
+  for (let i = 0; i < 6; i++) {
+    shortCode += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("UrlShortener");
+  if (!sheet) {
+    sheet = ss.insertSheet("UrlShortener");
+    sheet.appendRow(["短代碼", "原始網址", "建立時間", "點擊次數", "uid標記"]);
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([shortCode, longUrl, new Date(), 0, note]);
+
+  return FRONTEND_URL + "/" + shortCode;
+}
+
+// ==========================================
+// 12. 點擊統計（依委員彙整 UrlShortener）
+// ==========================================
+function getClickStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet = ss.getSheetByName("UrlShortener");
+  const candSheet = ss.getSheetByName(SHEET_NAME);
+  if (!urlSheet || !candSheet) return { status: 'success', stats: [] };
+
+  const urlData  = urlSheet.getDataRange().getValues();
+  const candData = candSheet.getDataRange().getValues();
+
+  // ── 建立「Drive URL → 科別|梯次」反向查詢（用於舊的未標記行前通知連結）──
+  const venueMap = buildVenueMap();
+  const driveUrlToKey = {};   // driveUrl → "subject|batch"
+  for (const [subject, entry] of Object.entries(venueMap)) {
+    if (entry.linkNei && entry.linkNei.startsWith('http')) {
+      driveUrlToKey[entry.linkNei.trim()] = subject + '|1';
+    }
+    if (entry.linkWai && entry.linkWai.startsWith('http')) {
+      driveUrlToKey[entry.linkWai.trim()] = subject + '|2';
+    }
+  }
+
+  // "subject|batch" → 群組未標記點擊總計
+  const untaggedPreNotice = {};
+
+  // uid → { inviteClicks, preNoticeClicks }
+  const statsMap = {};
+
+  for (let i = 1; i < urlData.length; i++) {
+    const longUrl  = String(urlData[i][1] || '').trim();
+    const clicks   = Number(urlData[i][3]) || 0;
+    const note     = String(urlData[i][4] || '').trim();  // uid標記（第5欄）
+
+    const uidInUrl = (longUrl.match(/[?&]uid=([^&]+)/) || [])[1] || '';
+    let uid  = null;
+    let type = null;
+
+    if (uidInUrl) {
+      // 邀請簡訊連結（URL 含 uid）
+      uid  = uidInUrl;
+      type = 'invite';
+    } else if (note) {
+      // 行前通知雲端連結（第5欄有 uid 標記）
+      uid  = note;
+      type = 'prenotice';
+    } else if (driveUrlToKey[longUrl]) {
+      // 舊批次行前通知（無 uid 標記）→ 累加到科別+梯次群組
+      const key = driveUrlToKey[longUrl];
+      untaggedPreNotice[key] = (untaggedPreNotice[key] || 0) + clicks;
+      continue;
+    }
+
+    if (!uid) continue;
+    if (!statsMap[uid]) statsMap[uid] = { inviteClicks: 0, preNoticeClicks: 0 };
+    if (type === 'invite')     statsMap[uid].inviteClicks     += clicks;
+    if (type === 'prenotice')  statsMap[uid].preNoticeClicks  += clicks;
+  }
+
+  // 整合候選人基本資料
+  const stats = [];
+  for (let i = 1; i < candData.length; i++) {
+    const uid     = String(candData[i][0] || '').trim();
+    if (!uid) continue;
+    const subject = String(candData[i][2] || '').trim();
+    const batch   = String(candData[i][4] || '1').trim();
+    const s = statsMap[uid] || { inviteClicks: 0, preNoticeClicks: 0 };
+
+    // 若個人無 tagged 行前通知點擊，補充群組未標記資料（舊批次共用，僅供參考）
+    const groupKey = subject + '|' + batch;
+    const preNoticeGroupClicks = untaggedPreNotice[groupKey] || 0;
+
+    stats.push({
+      uid,
+      name:                 candData[i][1]  || '',
+      subject,
+      batch,
+      willingness:          candData[i][6]  || '',
+      inviteClicks:         s.inviteClicks,
+      preNoticeClicks:      s.preNoticeClicks,
+      preNoticeGroupClicks  // 群組總計（無法識別個人，多人共享同一數字）
+    });
+  }
+
+  return { status: 'success', stats };
+}
+
+// ==========================================
+// 將短代碼解析回真實的 UID
+// ==========================================
+function resolveShortCode(shortCode) {
+  if (!shortCode) throw new Error("缺少短代碼參數");
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("UrlShortener");
+  if (!sheet) throw new Error("找不到 UrlShortener 分頁");
+  
+  const data = sheet.getDataRange().getValues();
+  
+  // 迴圈比對短代碼
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === shortCode) {
+      const longUrl = data[i][1];
+      
+      // 記錄點擊次數 (+1)
+      const currentClicks = Number(data[i][3]) || 0;
+      sheet.getRange(i + 1, 4).setValue(currentClicks + 1);
+      
+      // 候選人邀請連結（含 uid）→ 回傳 uid 給前端載入回覆表單
+      const uidMatch = longUrl.match(/uid=([^&]+)/);
+      if (uidMatch) {
+        return { uid: uidMatch[1], type: 'candidate' };
+      }
+      // 其他任意外部連結（行前通知、表單等）→ 回傳原始 URL 讓前端直接跳轉
+      return { url: longUrl, type: 'redirect' };
+    }
+  }
+  
+  // 如果迴圈跑完都沒找到
+  throw new Error("無效或已過期的短代碼");
+}
