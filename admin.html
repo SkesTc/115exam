@@ -563,6 +563,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-outline-warning btn-sm" onclick="showUrlShortenerDebug()" title="查看 UrlShortener 原始資料"><i class="fa-solid fa-bug me-1"></i>診斷</button>
           <button type="button" class="btn btn-outline-primary btn-sm" onclick="loadClickStats()"><i class="fa-solid fa-arrows-rotate me-1"></i>重新整理</button>
         </div>
       </div>
@@ -1358,6 +1359,41 @@ function exportSmsExcel() {
       }).join('');
     }
     document.getElementById('clickStatsCount').textContent = `共 ${list.length} 筆`;
+  }
+
+  // ── UrlShortener 診斷 ──
+  function showUrlShortenerDebug() {
+    fetch(`${API_URL}?action=getUrlShortenerDebug`)
+      .then(r => r.json())
+      .then(result => {
+        const d = result.data || result;
+        const rows = d.rows || [];
+        let html = `<p>共 ${d.totalRows || 0} 列（顯示前50筆）</p>`;
+        html += `<table class="table table-sm table-bordered" style="font-size:0.75rem">
+          <thead><tr>
+            <th>列</th><th>A 短代碼</th><th>B 原始網址</th><th>D 點擊</th><th>E uid標記</th><th>總欄數</th>
+          </tr></thead><tbody>`;
+        rows.forEach(r => {
+          const urlShort = r.col_B.length > 50 ? r.col_B.slice(0, 50) + '…' : r.col_B;
+          const eStyle = r.col_E && r.col_E !== '(無)' && r.col_E !== '' ? 'background:#d4edda' : 'background:#f8d7da';
+          html += `<tr>
+            <td>${r.rowNum}</td>
+            <td>${r.col_A}</td>
+            <td style="max-width:200px;overflow:hidden;white-space:nowrap" title="${r.col_B}">${urlShort}</td>
+            <td>${r.col_D}</td>
+            <td style="${eStyle}">${r.col_E}</td>
+            <td>${r.totalCols}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>
+          <p class="text-muted small">E欄綠色=有uid標記，紅色=空白（舊批次）</p>`;
+        const w = window.open('', '_blank', 'width=900,height=600,scrollbars=yes');
+        w.document.write(`<html><head><title>UrlShortener診斷</title>
+          <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+          </head><body class="p-3">${html}</body></html>`);
+        w.document.close();
+      })
+      .catch(err => alert('診斷載入失敗：' + err));
   }
 
   // ── 委員簽到表（直式 PDF 列印） ──

@@ -40,6 +40,8 @@ function doGet(e) {
       data = getSmsConfig();
     } else if (action === 'getClickStats') {
       data = getClickStats();
+    } else if (action === 'getUrlShortenerDebug') {
+      data = getUrlShortenerDebug();
     } else if (action === 'resolveShortCode') {
       // 處理前端丟過來的短代碼解析請求
       data = resolveShortCode(p.s);
@@ -1140,16 +1142,20 @@ function getClickStats() {
   const urlData  = urlSheet.getDataRange().getValues();
   const candData = candSheet.getDataRange().getValues();
 
-  // ── 建立「Drive URL → 科別|梯次」反向查詢（用於舊的未標記行前通知連結）──
+  // ── 從 Drive URL 擷取資料夾 ID（對抗 URL 格式差異）──
+  const extractFolderId = url => {
+    const m = String(url || '').match(/folders\/([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  };
+
+  // ── 建立「Drive 資料夾ID → 科別|梯次」反向查詢（用於舊的未標記行前通知連結）──
   const venueMap = buildVenueMap();
-  const driveUrlToKey = {};   // driveUrl → "subject|batch"
+  const driveIdToKey = {};   // folderId → "subject|batch"
   for (const [subject, entry] of Object.entries(venueMap)) {
-    if (entry.linkNei && entry.linkNei.startsWith('http')) {
-      driveUrlToKey[entry.linkNei.trim()] = subject + '|1';
-    }
-    if (entry.linkWai && entry.linkWai.startsWith('http')) {
-      driveUrlToKey[entry.linkWai.trim()] = subject + '|2';
-    }
+    const idNei = extractFolderId(entry.linkNei);
+    const idWai = extractFolderId(entry.linkWai);
+    if (idNei) driveIdToKey[idNei] = subject + '|1';
+    if (idWai) driveIdToKey[idWai] = subject + '|2';
   }
 
   // "subject|batch" → 群組未標記點擊總計
@@ -1163,7 +1169,8 @@ function getClickStats() {
     const clicks   = Number(urlData[i][3]) || 0;
     const note     = String(urlData[i][4] || '').trim();  // uid標記（第5欄）
 
-    const uidInUrl = (longUrl.match(/[?&]uid=([^&]+)/) || [])[1] || '';
+    const uidInUrl  = (longUrl.match(/[?&]uid=([^&]+)/) || [])[1] || '';
+    const folderId  = extractFolderId(longUrl);
     let uid  = null;
     let type = null;
 
@@ -1172,12 +1179,12 @@ function getClickStats() {
       uid  = uidInUrl;
       type = 'invite';
     } else if (note) {
-      // 行前通知雲端連結（第5欄有 uid 標記）
+      // 行前通知雲端連結（第5欄有 uid 標記，新批次）
       uid  = note;
       type = 'prenotice';
-    } else if (driveUrlToKey[longUrl]) {
-      // 舊批次行前通知（無 uid 標記）→ 累加到科別+梯次群組
-      const key = driveUrlToKey[longUrl];
+    } else if (folderId && driveIdToKey[folderId]) {
+      // 舊批次行前通知（無 uid 標記，用資料夾 ID 對應科別+梯次）
+      const key = driveIdToKey[folderId];
       untaggedPreNotice[key] = (untaggedPreNotice[key] || 0) + clicks;
       continue;
     }
@@ -1209,11 +1216,32 @@ function getClickStats() {
       willingness:          candData[i][6]  || '',
       inviteClicks:         s.inviteClicks,
       preNoticeClicks:      s.preNoticeClicks,
-      preNoticeGroupClicks  // 群組總計（無法識別個人，多人共享同一數字）
+      preNoticeGroupClicks  // 群組總計（舊批次無法識別個人，多人共享同一數字）
     });
   }
 
   return { status: 'success', stats };
+}
+
+// ==========================================
+// 12-b. UrlShortener 診斷（debug 用）
+// ==========================================
+function getUrlShortenerDebug() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName("UrlShortener");
+  if (!sheet) return { status: 'success', rows: [], message: '找不到 UrlShortener 分頁' };
+
+  const data = sheet.getDataRange().getValues();
+  const rows = data.slice(0, 50).map((r, i) => ({
+    rowNum:    i,
+    col_A:     String(r[0] || ''),   // 短代碼
+    col_B:     String(r[1] || ''),   // 原始網址（縮短）
+    col_D:     r[3] !== undefined ? r[3] : '(無)',  // 點擊次數
+    col_E:     r[4] !== undefined ? String(r[4]) : '(無)',  // uid標記
+    totalCols: r.length
+  }));
+
+  return { status: 'success', rows, totalRows: data.length };
 }
 
 // ==========================================
