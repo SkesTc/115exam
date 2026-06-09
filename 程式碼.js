@@ -1002,8 +1002,30 @@ function recordPreNoticeEmailOpen(u){
 // ==========================================
 // 7. 系統初始化與選單 (Init)
 // ==========================================
+// 一次性工具：將所有「同意」委員的行前通知簡訊狀態設為 2026/6/7
+// ==========================================
+function setPreNoticeSmsDateForAllAgreed() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const data = sheet.getDataRange().getValues();
+  const targetDate = new Date(2026, 5, 7);  // 2026/06/07（月份 0-indexed）
+  let count = 0;
 
-function initCandidatesSheet() { 
+  for (let i = 1; i < data.length; i++) {
+    if (!data[i][0]) continue;          // 跳過空列
+    if (data[i][6] === 'yes') {         // col G = 意願 = 同意
+      sheet.getRange(i + 1, 18).setValue(targetDate);  // col R = 行前通知簡訊狀態
+      count++;
+    }
+  }
+
+  SpreadsheetApp.flush();
+  Logger.log('已更新 ' + count + ' 筆資料（行前通知簡訊狀態 → 2026/06/07）');
+  Browser.msgBox('完成！共更新 ' + count + ' 位同意委員的行前通知簡訊狀態為 2026/06/07');
+}
+
+// ==========================================
+
+function initCandidatesSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
   let s = ss.getSheetByName(SHEET_NAME);

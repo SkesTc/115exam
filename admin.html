@@ -241,12 +241,24 @@
           <option value="幼兒園學前特殊教師【試教】">幼兒園學前特殊教師【試教】</option>
         </select>
 
-        <label class="fw-bold text-nowrap ms-2"><i class="fa-regular fa-paper-plane me-1"></i>狀態:</label>
-        <select id="filterStatus" class="form-select filter-box" style="width: auto; min-width: 110px;">
-          <option value="">所有狀態</option>
-          <option value="未發送">未發送</option>
+        <label class="fw-bold text-nowrap ms-2"><i class="fa-regular fa-paper-plane me-1"></i>邀請狀態:</label>
+        <select id="filterStatus" class="form-select filter-box" style="width: auto; min-width: 120px;">
+          <option value="">全部</option>
+          <option value="nosent">信件未寄</option>
           <option value="信件已寄">信件已寄</option>
           <option value="信件已讀">信件已讀</option>
+          <option value="sms">簡訊已寄</option>
+          <option value="nosms">簡訊未寄</option>
+        </select>
+
+        <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-bell me-1"></i>行前通知:</label>
+        <select id="filterPreNotice" class="form-select filter-box" style="width: auto; min-width: 120px;">
+          <option value="">全部</option>
+          <option value="nosent">信件未寄</option>
+          <option value="信件已寄">信件已寄</option>
+          <option value="信件已讀">信件已讀</option>
+          <option value="sms">簡訊已寄</option>
+          <option value="nosms">簡訊未寄</option>
         </select>
 
         <label class="fw-bold text-nowrap ms-2"><i class="fa-solid fa-reply me-1"></i>回覆:</label>
@@ -693,12 +705,32 @@
       dataTable.column(1).search(text).draw();
     });
     $('#filterSubject').on('change', function(){ if(dataTable) dataTable.column(2).search(this.value).draw(); });
-    // 👇 新增：狀態 (第 6 欄，index 為 5)
-    $('#filterStatus').on('change', function(){ 
-      if(dataTable) dataTable.column(5).search(this.value).draw(); 
-    });
+    // 共用：邀請狀態 / 行前通知 欄位的篩選邏輯
+    function applyStatusFilter(colIdx, val) {
+      if (!dataTable) return;
+      if (val === '') {
+        dataTable.column(colIdx).search('').draw();
+      } else if (val === 'nosent') {
+        // 信件未寄：格子不含「信件已寄」也不含「信件已讀」
+        dataTable.column(colIdx).search('^(?!.*信件已寄)(?!.*信件已讀)', true, false).draw();
+      } else if (val === 'nosms') {
+        // 簡訊未寄：格子不含「簡訊已寄」
+        dataTable.column(colIdx).search('^(?!.*簡訊已寄)', true, false).draw();
+      } else if (val === 'sms') {
+        dataTable.column(colIdx).search('簡訊已寄', false, false).draw();
+      } else {
+        // 信件已寄 / 信件已讀 — 純文字比對
+        dataTable.column(colIdx).search(val, false, false).draw();
+      }
+    }
 
-    // 👇 新增：回覆 (第 8 欄，index 為 7，新增行前通知欄後 +1)
+    // 邀請狀態 (column 5)
+    $('#filterStatus').on('change', function() { applyStatusFilter(5, this.value); });
+
+    // 行前通知 (column 6)
+    $('#filterPreNotice').on('change', function() { applyStatusFilter(6, this.value); });
+
+    // 👇 回覆 (第 8 欄，index 為 7，新增行前通知欄後 +1)
     $('#filterReply').on('change', function(){
       if(dataTable) {
         let val = this.value;
@@ -726,8 +758,9 @@
 function reloadData() {
     $('#filterBatch').val('');
     $('#filterSubject').val('');
-    $('#filterStatus').val(''); // 新增這行
-    $('#filterReply').val('');  // 新增這行
+    $('#filterStatus').val('');
+    $('#filterPreNotice').val('');
+    $('#filterReply').val('');
     $('#loading-overlay').fadeIn(100);
     loadData();
   }
