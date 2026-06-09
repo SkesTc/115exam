@@ -1184,16 +1184,16 @@ function reloadData() {
         nh = `<a tabindex="0" class="ms-2 text-danger text-decoration-none" role="button" data-bs-toggle="popover" data-bs-trigger="focus" data-bs-content="${safe}"><i class="fa-solid fa-circle-exclamation fs-5 align-middle"></i></a>`;
     }
     
-    // 將組裝好的 HTML 寫入正確的 eq(6) 格子裡
+    // 將組裝好的 HTML 寫入正確的 eq(7) 格子裡（行前通知欄新增後 +1）
     if (!d.willingness) {
-        r.find('td').eq(6).html(`<div><span class="badge bg-secondary">更新中...</span></div>`);
-        setTimeout(reloadData, 500); 
+        r.find('td').eq(7).html(`<div><span class="badge bg-secondary">更新中...</span></div>`);
+        setTimeout(reloadData, 500);
     } else {
-        r.find('td').eq(6).html(`<div class="d-flex align-items-center"><div>${bh}<br><small class="text-muted">剛剛更新</small></div>${nh}</div>`);
+        r.find('td').eq(7).html(`<div class="d-flex align-items-center"><div>${bh}<br><small class="text-muted">剛剛更新</small></div>${nh}</div>`);
     }
 
     // 重新綁定該格子的 Popover (備註提示框)
-    const newPop = r.find('td').eq(6).find('[data-bs-toggle="popover"]'); 
+    const newPop = r.find('td').eq(7).find('[data-bs-toggle="popover"]');
     if (newPop.length) new bootstrap.Popover(newPop[0]);
     
     // 5. 更新編輯按鈕參數
