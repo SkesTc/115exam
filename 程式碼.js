@@ -204,6 +204,9 @@ function adminExportPreNoticeSmsData(ids) {
     }
 
     exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
+
+    // 與 adminExportSmsData 一致：寫入匯出時間至 col R（第18欄 = 行前通知簡訊狀態）
+    sheet.getRange(i + 1, 18).setValue(new Date());
   }
 
   return { status: 'success', excelData: exportData };
