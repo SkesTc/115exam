@@ -1016,7 +1016,13 @@ function reloadData() {
           }
         }
         let pnSmsBadge = "";
-        if (row.preNoticeSmsStatus) pnSmsBadge = `<div class="mt-1"><span class="badge bg-info text-dark" style="font-size:0.7rem" title="${row.preNoticeSmsStatus}"><i class="fa-solid fa-comment-sms me-1"></i>簡訊已寄</span></div>`;
+        if (row.preNoticeSmsStatus) {
+          const pnClicks = row.preNoticeSmsClicks || 0;
+          const pnClickBadge = pnClicks > 0
+            ? `<span class="badge bg-success ms-1" style="font-size:0.7rem"><i class="fa-solid fa-hand-pointer me-1"></i>${pnClicks}</span>`
+            : '';
+          pnSmsBadge = `<div class="mt-1"><span class="badge bg-info text-dark" style="font-size:0.7rem" title="${row.preNoticeSmsStatus}"><i class="fa-solid fa-comment-sms me-1"></i>簡訊已寄</span>${pnClickBadge}</div>`;
+        }
         const preNoticeHtml = `<div>${pnEmailBadge}${pnSmsBadge}</div>`;
 
         let badgeHtml = `<span class="text-muted">-</span>`;

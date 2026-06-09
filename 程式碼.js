@@ -247,6 +247,25 @@ function buildPreNoticeShortUrlMap() {
   return map;
 }
 
+// ── 輔助：彙整每位委員的行前通知簡訊點擊次數（uid → 累計點擊數）──
+//    行前通知記錄：col E 有 uid 標記且 col B 非邀請連結（不含 ?uid=）
+function buildPreNoticeClicksMap(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet = ss.getSheetByName('UrlShortener');
+  if (!urlSheet) return {};
+  const rows = urlSheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < rows.length; i++) {
+    const longUrl = String(rows[i][1] || '').trim();
+    const clicks  = Number(rows[i][3]) || 0;
+    const uid     = String(rows[i][4] || '').trim();
+    if (uid && !longUrl.includes('?uid=')) {
+      map[uid] = (map[uid] || 0) + clicks;
+    }
+  }
+  return map;
+}
+
 // ==========================================
 // 2. 系統設定與範本存取 (Settings)
 // ==========================================
@@ -327,7 +346,10 @@ function getAdminData(timestamp) {
   const freshSS = SpreadsheetApp.openById(currentSS.getId());
   const sheet = freshSS.getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
-  
+
+  // 預先建立行前通知簡訊點擊次數查找表
+  const preNoticeClicksMap = buildPreNoticeClicksMap(freshSS);
+
   const smsTemplate = getSettingValue('TEMPLATE_SMS') || "{{姓名}} 老師您好，誠邀您擔任教甄委員。回覆連結： {{連結}}";
   const timeZone = Session.getScriptTimeZone();
   const fmtTime = (d) => {
@@ -379,7 +401,8 @@ function getAdminData(timestamp) {
       replyTime: fmtTime(data[i][9]),
       preNoticeStatus: preNoticeStatus,
       preNoticeReadTime: fmtTime(preNoticeReadTime),
-      preNoticeSmsStatus: preNoticeSmsStatus ? fmtTime(preNoticeSmsStatus) : ""
+      preNoticeSmsStatus: preNoticeSmsStatus ? fmtTime(preNoticeSmsStatus) : "",
+      preNoticeSmsClicks: preNoticeClicksMap[data[i][0]] || 0
     });
   }
   return { stats: stats, list: list, smsTemplate: smsTemplate, appUrl: WEB_APP_URL };
