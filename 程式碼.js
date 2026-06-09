@@ -116,46 +116,51 @@ function doPost(e) {
 function adminExportSmsData(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
-  
+
   const sheetHeaders = data[0];
   const statusColIndex = sheetHeaders.indexOf("聯絡狀態");
-  
+
   const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一", "參數二", "參數三", "參數四", "參數五"];
   let exportData = [headers];
-  
+
+  // 優先使用已建立的縮網址（longUrl → shortCode）
+  const inviteUrlMap = buildInviteShortUrlMap();
+
   for (let i = 1; i < data.length; i++) {
     if (!ids.includes(data[i][0])) continue;
-    
+
     const row = data[i];
     const name = row[1] || "";
     const phoneRaw = row[11];
     const phone = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, "") : "";
-    //const email = row[3] || "";
     const email = "";
     const title = row[13] || "";
     const date = "";
     const longLink = FRONTEND_URL + "?uid=" + row[0];
-    let shortLink = createShortUrl(longLink); 
-    
+
+    // 若已有縮網址則直接使用，否則建立新的
+    const existingCode = inviteUrlMap[longLink];
+    const shortLink = existingCode
+      ? FRONTEND_URL + "/" + existingCode
+      : createShortUrl(longLink);
+
     const p1 = name;
     const p2 = title;
-    
-    // ★ 關鍵修改：利用 replace 將開頭的 http:// 或 https:// 替換為空字串
-    const p3 = shortLink.replace(/^http?:\/\//i, ''); 
-    
+    const p3 = shortLink.replace(/^https?:\/\//i, '');
+
     const p4 = "";
     const p5 = "";
     exportData.push([name, phone, email, date, p1, p2, p3, p4, p5]);
-    
+
     // 更新狀態為「批次簡訊」
     if (statusColIndex !== -1) {
       sheet.getRange(i + 1, statusColIndex + 1).setValue("批次簡訊");
     }
-    
+
     // (保留功能) 寫入當前時間至第 15 欄 (簡訊狀態)
     sheet.getRange(i + 1, 15).setValue(new Date());
   }
-  
+
   return { status: 'success', excelData: exportData };
 }
 // ── 行前通知簡訊批次檔 (EVERY8D 格式，只含已同意委員) ──
@@ -164,6 +169,9 @@ function adminExportPreNoticeSmsData(ids) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   const venueMap = buildVenueMap();   // 只讀一次 Dashboard
+
+  // 優先使用已建立的縮網址（uid|cloudLinkRaw → shortCode）
+  const preNoticeUrlMap = buildPreNoticeShortUrlMap();
 
   const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(雲端連結)", "參數五(飲食)"];
   let exportData = [headers];
@@ -180,18 +188,63 @@ function adminExportPreNoticeSmsData(ids) {
     if (!ids.includes(uid)) continue;
     if (willingness !== 'yes') continue;
 
-    const phone          = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
-    const venue          = getVenueBySubject(subject, venueMap);
-    const cloudLinkRaw   = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
-    // 批次檔雲端連結轉短網址（去除 https:// 前綴，符合簡訊格式）
-    const cloudLink = cloudLinkRaw
-      ? createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '')  // 帶入 uid 標記
-      : '';
+    const phone        = phoneRaw ? String(phoneRaw).replace(/[-\s]/g, '') : '';
+    const venue        = getVenueBySubject(subject, venueMap);
+    const cloudLinkRaw = getCloudLinkBySubject(subject, batch, venueMap);  // 依內/外聘取不同連結
+
+    let cloudLink = '';
+    if (cloudLinkRaw) {
+      // 若已有此 uid 對應的縮網址則直接使用，否則建立新的
+      const existingCode = preNoticeUrlMap[uid + '|' + cloudLinkRaw];
+      if (existingCode) {
+        cloudLink = (FRONTEND_URL + "/" + existingCode).replace(/^https?:\/\//i, '');
+      } else {
+        cloudLink = createShortUrl(cloudLinkRaw, uid).replace(/^https?:\/\//i, '');
+      }
+    }
 
     exportData.push([name, phone, '', '', name, venue, subject, cloudLink, diet]);
   }
 
   return { status: 'success', excelData: exportData };
+}
+
+// ── 輔助：建立邀請簡訊縮網址查找表（longUrl → shortCode）──
+//    invite URL 格式：FRONTEND_URL + "?uid=" + uid
+function buildInviteShortUrlMap() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet = ss.getSheetByName('UrlShortener');
+  if (!urlSheet) return {};
+  const rows = urlSheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < rows.length; i++) {
+    const code = String(rows[i][0] || '').trim();
+    const url  = String(rows[i][1] || '').trim();
+    if (code && url && url.includes('?uid=')) {
+      map[url] = code;  // 後面的覆蓋前面 → 保留最新一筆
+    }
+  }
+  return map;
+}
+
+// ── 輔助：建立行前通知縮網址查找表（uid|cloudLinkRaw → shortCode）──
+//    行前通知的 UrlShortener 記錄：col E = uid 標記，col B = 雲端連結（非 ?uid= 格式）
+function buildPreNoticeShortUrlMap() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const urlSheet = ss.getSheetByName('UrlShortener');
+  if (!urlSheet) return {};
+  const rows = urlSheet.getDataRange().getValues();
+  const map = {};
+  for (let i = 1; i < rows.length; i++) {
+    const code = String(rows[i][0] || '').trim();
+    const url  = String(rows[i][1] || '').trim();
+    const uid  = String(rows[i][4] || '').trim();
+    // 行前通知：有 uid 標記且非邀請連結
+    if (code && url && uid && !url.includes('?uid=')) {
+      map[uid + '|' + url] = code;  // 後面的覆蓋前面 → 保留最新一筆
+    }
+  }
+  return map;
 }
 
 // ==========================================
