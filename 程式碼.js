@@ -173,7 +173,7 @@ function adminExportPreNoticeSmsData(ids) {
   // 優先使用已建立的縮網址（uid|cloudLinkRaw → shortCode）
   const preNoticeUrlMap = buildPreNoticeShortUrlMap();
 
-  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一(姓名)", "參數二(考場)", "參數三(科別)", "參數四(雲端連結)", "參數五(飲食)"];
+  const headers = ["姓名", "手機門號", "電子郵件", "傳送日期", "參數一", "參數二", "參數三", "參數四", "參數五"];
   let exportData = [headers];
 
   for (let i = 1; i < data.length; i++) {
