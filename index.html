@@ -1,236 +1,39 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
+<!doctype html>
+<html lang="zh-Hant-TW">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex">
-    <title>臺中市115教甄委員意願徵詢回覆系統</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <!-- 不把網址（含短網址代碼）透過 Referer 傳給目的地以外的網站 -->
+    <meta name="referrer" content="no-referrer" />
+    <title>委員徵詢平台</title>
     <style>
-      body { background-color: #f8f9fa; padding-top: 20px; }
-      .container { max-width: 600px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 40px;}
-      .header-title { color: #2c3e50; font-weight: bold; text-align: center; margin-bottom: 16px; }
-      .hidden { display: none !important; }
+      body { font-family: system-ui, 'Microsoft JhengHei', sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; color: #222; line-height: 1.7; }
+      a { color: #0b57d0; }
     </style>
   </head>
   <body>
-    <div class="container">
-      <h3 class="header-title">臺中市115學年度國小及幼兒園教師甄選<br>甄試委員意願徵詢回覆系統</h3>
-      
-      <div id="loading" class="text-center my-4">
-        <div class="spinner-border text-primary" role="status"></div>
-        <p class="mt-2 text-muted">系統讀取中...</p>
-      </div>
-
-      <div id="error-msg" class="alert alert-danger hidden">聯繫窗口：【社口國小教務處 李主任 04-25626834分機710】</div>
-      
-      <div id="responded-msg" class="alert alert-success hidden">
-        <h4><span id="responded-name"></span> 委員您好：</h4>
-        <p>您先前已完成回覆，無需重複填寫。<br>若需修改請聯繫社口國小教務處李主任04-25626834分機710。</p>
-      </div>
-
-      <form id="main-form" class="hidden" onsubmit="submitData(event)">
-        <input type="hidden" name="uid" id="input-uid">
-        
-        <div class="mb-3">
-          <label class="form-label">委員姓名</label>
-          <input type="text" class="form-control" id="display-name" disabled readonly>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">受邀科別</label>
-          <input type="text" class="form-control" id="display-subject" disabled readonly>
-        </div>
-        <hr>
-        <div class="mb-3">
-          <label class="form-label fw-bold">請問您是否願意擔任本次甄試委員？</label>
-          <select class="form-select" name="willingness" id="willingness" onchange="toggleFields()" required>
-            <option value="" selected disabled>請選擇...</option>
-            <option value="yes">是的，我有意願且時間可配合</option>
-            <option value="no">抱歉，因故無法擔任</option>
-          </select>
-        </div>
-
-        <div id="yes-fields" class="hidden">
-           <div class="alert alert-info py-2"><small>甄試日期：115年6月14日(星期日)。<br>聯繫窗口：社口國小教務處李主任 04-25626834分機710</small></div>
-           <div class="mb-3">
-            <label class="form-label">飲食習慣</label>
-            <select class="form-select" name="diet">
-              <option value="">請選擇葷素</option>
-              <option value="葷">葷食</option>
-              <option value="素">素食</option>
-              <option value="其他">其他 (請於備註說明)</option>
-            </select>
-          </div>
-           <div class="mb-3">
-            <label class="form-label">其他備註</label>
-            <textarea class="form-control" name="memo" rows="2"></textarea>
-          </div>
-        </div>
-
-        <div id="no-fields" class="hidden">
-           <div class="mb-3">
-            <label class="form-label">婉拒原因 (選填)</label>
-            <textarea class="form-control" name="rejectReason" rows="2"></textarea>
-          </div>
-        </div>
-
-        <div class="d-grid mt-4">
-          <button type="submit" id="submit-btn" class="btn btn-primary btn-lg">確認送出</button>
-        </div>
-      </form>
-      
-      <div id="success-view" class="hidden text-center my-4">
-        <h4 class="text-success fw-bold mb-3"><i class="fa-solid fa-circle-check"></i> 回覆成功！</h4>
-        <p>感謝 <span id="success-name" class="fw-bold text-primary"></span> 委員的回覆。<br>系統已同步記錄您的意願。</p>
-      </div>
-    </div>
-
+    <p id="msg">正在前往委員徵詢平台…</p>
+    <noscript><p>請開啟 JavaScript，或直接前往 <a id="fallback" href="#">委員徵詢平台</a>。</p></noscript>
     <script>
-// ==========================================
-      // ★★★ 重要：請替換成您的 Google 網頁應用程式部署 URL ★★★
-      // ==========================================
-      //const API_URL = "https://script.google.com/macros/s/AKfycbwPaKHUAIE2yUB8kEijIKFYHcEaRl2ts0X2a9efGyZSAo2IsomLWJXkYRvPU_2GIM_B/exec"; 
-      const API_URL = "https://api-fetcher.kelvin-d83.workers.dev"
+      ;(function () {
+        // ★ 部署平台後改成實際的網址（結尾不要加 /）
+        var TARGET = 'https://committee-platform.kelvin-d83.workers.dev'
 
-
-      window.onload = function() {
-        // 從目前的網址中抓取參數
-        const urlParams = new URLSearchParams(window.location.search);
-        const uid = urlParams.get('uid'); 
-        let shortCode = urlParams.get('s'); // 新增：抓取短代碼參數
-        
-        // ★ 新增這段：如果找不到 ?s=，就試著從網址路徑 (Path) 中抓取短代碼 ★
-        if (!shortCode && !uid) {
-          // 取得路徑，例如 /aB3x9Z
-          const pathName = window.location.pathname;
-          // 取得最後一段字串
-          const pathPart = pathName.split('/').pop();
-          
-          // 檢查這段字串是否剛好是 6 個英數字 (也就是我們的短代碼格式)
-          if (pathPart && pathPart.length === 6 && /^[a-zA-Z0-9]{6}$/.test(pathPart)) {
-            shortCode = pathPart;
-          }
+        var path = location.pathname
+        // 只轉送短網址（/s/代碼）與回覆連結（/r/代碼），其他一律到平台首頁
+        if (/^\/(s|r)\/[A-Za-z0-9_-]{8,43}\/?$/.test(path)) {
+          location.replace(TARGET + path)
+          return
         }
-
-        console.log("從網址取得的參數 - UID:", uid, "短代碼:", shortCode);
-
-        // 狀況 A：網址是短網址模式 (?s=xxx)，需先向後端請求真實 UID
-        if (shortCode) {
-          fetch(`${API_URL}?action=resolveShortCode&s=${shortCode}`)
-            .then(response => response.json())
-            .then(result => {
-              console.log('[resolveShortCode] 短代碼:', shortCode);
-              console.log('[resolveShortCode] API 回傳:', JSON.stringify(result));
-              const resData = result.data ? result.data : result;
-              if (result.status === 'success') {
-                if (resData.type === 'redirect' && resData.url) {
-                  // 外部連結（行前通知表單等）→ 直接跳轉
-                  window.location.replace(resData.url);
-                } else if (resData.uid) {
-                  // 候選人邀請連結 → 載入回覆表單
-                  loadCandidateData(resData.uid);
-                } else {
-                  document.getElementById('loading').style.display = 'none';
-                  document.getElementById('error-msg').classList.remove('hidden');
-                  alert("此連結已失效或錯誤。\n[resData=" + JSON.stringify(resData) + "]");
-                }
-              } else {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error-msg').classList.remove('hidden');
-                alert("此連結已失效或錯誤。\n原因：" + (result.message || JSON.stringify(result)));
-              }
-            })
-            .catch(err => {
-              document.getElementById('loading').style.display = 'none';
-              alert("系統連線錯誤 (解析短代碼)：" + err);
-            });
-            
-        // 狀況 B：一般情況，網址本身就帶有 uid (?uid=xxx)
-        } else if (uid) {
-          loadCandidateData(uid);
-          
-        // 狀況 C：什麼參數都沒有
-        } else {
-          document.getElementById('loading').style.display = 'none';
-          document.getElementById('error-msg').classList.remove('hidden');
+        // 舊系統的回覆連結（?uid=）已停用
+        if (/[?&]uid=/.test(location.search)) {
+          document.getElementById('msg').innerHTML =
+            '此為舊系統的回覆連結，已經停用。<br>如需回覆或修改，請聯絡承辦人索取新的連結。'
+          return
         }
-      };
-
-      // 獨立出一個專門載入委員資料的函式
-      function loadCandidateData(targetUid) {
-        document.getElementById('input-uid').value = targetUid;
-
-        // 呼叫後端查詢資料
-        fetch(`${API_URL}?action=getCandidateInfo&uid=${targetUid}`)
-          .then(response => response.json())
-          .then(result => {
-             const data = result.data ? result.data : result;
-             showForm(data);
-          })
-          .catch(err => {
-             document.getElementById('loading').style.display = 'none';
-             alert("系統連線錯誤 (讀取資料)：" + err);
-          });
-      }
-
-      function showForm(data) {
-        document.getElementById('loading').style.display = 'none';
-        
-        if (data.status === 'not_found') { 
-          document.getElementById('error-msg').classList.remove('hidden'); 
-        } else if (data.status === 'responded') {
-          document.getElementById('responded-name').innerText = data.name;
-          document.getElementById('responded-msg').classList.remove('hidden');
-        } else {
-          document.getElementById('display-name').value = data.name;
-          document.getElementById('display-subject').value = data.subject;
-          document.getElementById('main-form').classList.remove('hidden');
-        }
-      }
-
-      function toggleFields() {
-        const val = document.getElementById('willingness').value;
-        if (val === 'yes') {
-          document.getElementById('yes-fields').classList.remove('hidden');
-          document.getElementById('no-fields').classList.add('hidden');
-        } else {
-          document.getElementById('yes-fields').classList.add('hidden');
-          document.getElementById('no-fields').classList.remove('hidden');
-        }
-      }
-
-      function submitData(e) {
-        e.preventDefault();
-        const btn = document.getElementById('submit-btn');
-        btn.disabled = true; 
-        btn.innerText = "處理中...";
-
-        // 收集表單資料並轉為 JSON 物件
-        const form = document.getElementById('main-form');
-        const formData = new FormData(form);
-        const dataObj = Object.fromEntries(formData.entries());
-
-// 呼叫後端提交資料 (改用 fetch POST)
-        fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'submitForm', data: dataObj })
-        })
-        .then(response => response.json())
-        .then(result => {
-           // 相容回傳資料結構
-           const resData = result.data ? result.data : result;
-           
-           document.getElementById('main-form').classList.add('hidden');
-           document.getElementById('success-name').innerText = resData.name || dataObj.name || "";
-           document.getElementById('success-view').classList.remove('hidden');
-        })
-        .catch(err => {
-           btn.disabled = false;
-           btn.innerText = "確認送出";
-           alert("儲存發生錯誤：" + err);
-        });
-      }
+        location.replace(TARGET + '/')
+      })()
     </script>
   </body>
 </html>
