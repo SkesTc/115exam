@@ -1,39 +1,17 @@
 <!doctype html>
 <html lang="zh-Hant-TW">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex" />
-    <!-- 不把網址（含短網址代碼）透過 Referer 傳給目的地以外的網站 -->
-    <meta name="referrer" content="no-referrer" />
-    <title>委員徵詢平台</title>
-    <style>
-      body { font-family: system-ui, 'Microsoft JhengHei', sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; color: #222; line-height: 1.7; }
-      a { color: #0b57d0; }
-    </style>
-  </head>
-  <body>
-    <p id="msg">正在前往委員徵詢平台…</p>
-    <noscript><p>請開啟 JavaScript，或直接前往 <a id="fallback" href="#">委員徵詢平台</a>。</p></noscript>
-    <script>
-      ;(function () {
-        // ★ 部署平台後改成實際的網址（結尾不要加 /）
-        var TARGET = 'https://committee-platform.kelvin-d83.workers.dev'
+    <meta http-equiv="Content-Security-Policy" content="default-src &#39;self&#39;; script-src &#39;self&#39; https://accounts.google.com/gsi/client; style-src &#39;self&#39; &#39;unsafe-inline&#39; https://accounts.google.com/gsi/style; frame-src https://accounts.google.com/gsi/; connect-src &#39;self&#39; https://accounts.google.com/gsi/ https://committee-platform.kelvin-d83.workers.dev; img-src &#39;self&#39; data: blob: https://*.googleusercontent.com; font-src &#39;self&#39;; object-src &#39;none&#39;; base-uri &#39;self&#39;; form-action &#39;self&#39;">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
 
-        var path = location.pathname
-        // 只轉送短網址（/s/代碼）與回覆連結（/r/代碼），其他一律到平台首頁
-        if (/^\/(s|r)\/[A-Za-z0-9_-]{8,43}\/?$/.test(path)) {
-          location.replace(TARGET + path)
-          return
-        }
-        // 舊系統的回覆連結（?uid=）已停用
-        if (/[?&]uid=/.test(location.search)) {
-          document.getElementById('msg').innerHTML =
-            '此為舊系統的回覆連結，已經停用。<br>如需回覆或修改，請聯絡承辦人索取新的連結。'
-          return
-        }
-        location.replace(TARGET + '/')
-      })()
-    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>委員徵詢平台</title>
+    <script type="module" crossorigin src="/assets/index-BAIj3EUm.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Bg0LuXe0.css">
+  </head>
+  <body class="bg-body-tertiary">
+    <div id="app"></div>
   </body>
 </html>
