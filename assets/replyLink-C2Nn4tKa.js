@@ -1,1 +1,0 @@
-import{d as e,u as t}from"./index-DzBCWFK1.js";var n=e=>`${location.origin}/r/${e}`;async function r(n,r=`已複製回覆連結`){try{await navigator.clipboard.writeText(n),e(r)}catch{t(`無法存取剪貼簿，請手動複製`)}}export{n,r as t};
