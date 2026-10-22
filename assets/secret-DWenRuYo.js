@@ -1,1 +1,0 @@
-import{tt as e}from"./api-DX3vninJ.js";import{rt as t}from"./index-DeMory10.js";var n=e(``);function r(e){n.value=t(e?.secret)}export{r as n,n as t};
