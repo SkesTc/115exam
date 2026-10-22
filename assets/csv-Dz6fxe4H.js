@@ -1,2 +1,0 @@
-import{t as e}from"./secret-C0dIgykS.js";function t(e){let t=e=>{let t=/^[=+\-@\t\r]/.test(e)?`'${e}`:e;return/[",\r\n]/.test(t)?`"${t.replace(/"/g,`""`)}"`:t};return`﻿`+e.map(e=>e.map(e=>t(e??``)).join(`,`)).join(`\r
-`)}function n(n,r){let i=e.value?[[e.value],...r]:r,a=URL.createObjectURL(new Blob([t(i)],{type:`text/csv;charset=utf-8`})),o=document.createElement(`a`);o.href=a,o.download=n,o.click(),URL.revokeObjectURL(a)}export{n as t};
