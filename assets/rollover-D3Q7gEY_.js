@@ -1,0 +1,1 @@
+function e(e){return e.replace(/(?<!\d)(1\d{2}|20\d{2})(?!\d)/g,e=>String(Number(e)+1))}export{e as t};

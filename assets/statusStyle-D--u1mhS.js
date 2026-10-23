@@ -1,0 +1,1 @@
+var e={draft:{btn:`btn-outline-secondary`,badge:`text-bg-light border`,icon:`bi-pencil`},open:{btn:`btn-success`,badge:`text-bg-success`,icon:`bi-broadcast`},closed:{btn:`btn-warning`,badge:`text-bg-warning`,icon:`bi-stop-circle`},finished:{btn:`btn-info`,badge:`text-bg-info`,icon:`bi-flag`},archived:{btn:`btn-dark`,badge:`text-bg-dark`,icon:`bi-archive`}};export{e as t};
