@@ -1,0 +1,1 @@
+import{I as e,X as t,et as n}from"./api-DX3vninJ.js";var r=n(new Set);function i(n){let i=Symbol();t(n,e=>e?r.add(i):r.delete(i),{immediate:!0}),e(()=>r.delete(i))}export{r as n,i as t};
