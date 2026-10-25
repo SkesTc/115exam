@@ -1,0 +1,1 @@
+import{tt as e}from"./api-DX3vninJ.js";import{st as t}from"./index-D_BXnq6Q.js";var n=e(``);function r(e){n.value=t(e?.secret)}export{r as n,n as t};
