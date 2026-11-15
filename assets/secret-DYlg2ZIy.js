@@ -1,1 +1,0 @@
-import{it as e}from"./api-BeBF3b2y.js";import{lt as t}from"./index-CuVduv_m.js";var n=e(``);function r(e){n.value=t(e?.secret)}export{r as n,n as t};
