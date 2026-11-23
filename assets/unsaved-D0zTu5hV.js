@@ -1,0 +1,1 @@
+import{B as e,G as t,w as n}from"./runtime-core.esm-bundler-PzK4fcyN.js";var r=t(new Set);function i(t){let i=Symbol();e(t,e=>e?r.add(i):r.delete(i),{immediate:!0}),n(()=>r.delete(i))}export{r as n,i as t};
