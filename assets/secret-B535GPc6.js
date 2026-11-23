@@ -1,1 +1,0 @@
-import{G as e}from"./runtime-core.esm-bundler-vT5vP3E_.js";import{ft as t}from"./index-CQMQh3sc.js";var n=e(``);function r(e){n.value=t(e?.secret)}export{r as n,n as t};
