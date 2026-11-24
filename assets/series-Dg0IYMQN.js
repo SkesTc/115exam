@@ -1,0 +1,1 @@
+function e(e,t){let n=(t??``).trim();return n?n.replace(/\s+/g,``):e.replace(/【[^】]*】|［[^］]*］|\[[^\]]*\]/g,``).replace(/\s+/g,``)||e}var t=e=>e.email.trim().toLowerCase()||`name:${e.name.replace(/\s+/g,``)}`;export{t as n,e as t};
